@@ -267,6 +267,60 @@ static void ubus_default_connection_lost(struct ubus_context *ctx)
 		uloop_end();
 }
 
+static int _ubus_connect(struct ubus_context *ctx, const char *path)
+{
+	ctx->sock.fd = -1;
+	ctx->sock.cb = ubus_handle_data;
+	ctx->connection_lost = ubus_default_connection_lost;
+
+	INIT_LIST_HEAD(&ctx->requests);
+	INIT_LIST_HEAD(&ctx->pending);
+	avl_init(&ctx->objects, ubus_cmp_id, false, NULL);
+	if (ubus_reconnect(ctx, path))
+		return -1;
+
+	return 0;
+}
+
+static void ubus_auto_reconnect_cb(struct uloop_timeout *timeout)
+{
+	struct ubus_auto_conn *conn = container_of(timeout, struct ubus_auto_conn, timer);
+
+	if (!ubus_reconnect(&conn->ctx, conn->path))
+		ubus_add_uloop(&conn->ctx);
+	else
+		uloop_timeout_set(timeout, 1000);
+}
+
+static void ubus_auto_disconnect_cb(struct ubus_context *ctx)
+{
+	struct ubus_auto_conn *conn = container_of(ctx, struct ubus_auto_conn, ctx);
+
+	conn->timer.cb = ubus_auto_reconnect_cb;
+	uloop_timeout_set(&conn->timer, 1000);
+}
+
+static void ubus_auto_connect_cb(struct uloop_timeout *timeout)
+{
+	struct ubus_auto_conn *conn = container_of(timeout, struct ubus_auto_conn, timer);
+
+	if (_ubus_connect(&conn->ctx, conn->path)) {
+		uloop_timeout_set(timeout, 1000);
+		fprintf(stderr, "failed to connect to ubus\n");
+		return;
+	}
+	conn->ctx.connection_lost = ubus_auto_disconnect_cb;
+	if (conn->cb)
+		conn->cb(&conn->ctx);
+	ubus_add_uloop(&conn->ctx);
+}
+
+void ubus_auto_connect(struct ubus_auto_conn *conn)
+{
+	conn->timer.cb = ubus_auto_connect_cb;
+	ubus_auto_connect_cb(&conn->timer);
+}
+
 struct ubus_context *ubus_connect(const char *path)
 {
 	struct ubus_context *ctx;
@@ -275,14 +329,7 @@ struct ubus_context *ubus_connect(const char *path)
 	if (!ctx)
 		return NULL;
 
-	ctx->sock.fd = -1;
-	ctx->sock.cb = ubus_handle_data;
-	ctx->connection_lost = ubus_default_connection_lost;
-
-	INIT_LIST_HEAD(&ctx->requests);
-	INIT_LIST_HEAD(&ctx->pending);
-	avl_init(&ctx->objects, ubus_cmp_id, false, NULL);
-	if (ubus_reconnect(ctx, path)) {
+	if (_ubus_connect(ctx, path)) {
 		free(ctx);
 		ctx = NULL;
 	}

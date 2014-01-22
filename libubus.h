@@ -56,6 +56,7 @@ typedef void (*ubus_data_handler_t)(struct ubus_request *req,
 typedef void (*ubus_complete_handler_t)(struct ubus_request *req, int ret);
 typedef void (*ubus_notify_complete_handler_t)(struct ubus_notify_request *req,
 					       int idx, int ret);
+typedef void (*ubus_connect_handler_t)(struct ubus_context *ctx);
 
 #define UBUS_OBJECT_TYPE(_name, _methods)		\
 	{						\
@@ -188,7 +189,15 @@ struct ubus_notify_request {
 	uint32_t id[UBUS_MAX_NOTIFY_PEERS + 1];
 };
 
+struct ubus_auto_conn {
+	struct ubus_context ctx;
+	struct uloop_timeout timer;
+	const char *path;
+	ubus_connect_handler_t cb;
+};
+
 struct ubus_context *ubus_connect(const char *path);
+void ubus_auto_connect(struct ubus_auto_conn *conn);
 int ubus_reconnect(struct ubus_context *ctx, const char *path);
 void ubus_free(struct ubus_context *ctx);
 
