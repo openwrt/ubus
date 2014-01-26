@@ -349,12 +349,11 @@ static int ubus_lua_load_methods(lua_State *L, struct ubus_method *m)
 	/* get the policy table */
 	lua_pushinteger(L, 2);
 	lua_gettable(L, -3);
-	plen = lua_gettablelen(L, -1);
 
 	/* check if the method table is valid */
 	if ((lua_type(L, -2) != LUA_TFUNCTION) ||
 			(lua_type(L, -1) != LUA_TTABLE) ||
-			lua_objlen(L, -1) || !plen) {
+			lua_objlen(L, -1)) {
 		lua_pop(L, 2);
 		return 1;
 	}
@@ -362,6 +361,17 @@ static int ubus_lua_load_methods(lua_State *L, struct ubus_method *m)
 	/* store function pointer */
 	lua_pushvalue(L, -2);
 	lua_setfield(L, -6, lua_tostring(L, -5));
+
+	m->name = lua_tostring(L, -4);
+	m->handler = ubus_method_handler;
+
+	plen = lua_gettablelen(L, -1);
+
+	/* exit if policy table is empty */
+	if (!plen) {
+		lua_pop(L, 2);
+		return 0;
+	}
 
 	/* setup the policy pointers */
 	p = malloc(sizeof(struct blobmsg_policy) * plen);
@@ -386,8 +396,6 @@ static int ubus_lua_load_methods(lua_State *L, struct ubus_method *m)
 	}
 
 	m->n_policy = pidx;
-	m->name = lua_tostring(L, -4);
-	m->handler = ubus_method_handler;
 	lua_pop(L, 2);
 
 	return 0;
