@@ -19,8 +19,8 @@
 #include <lauxlib.h>
 #include <lua.h>
 
-#define MODNAME        "ubus"
-#define METANAME       MODNAME ".meta"
+#define MODNAME		"ubus"
+#define METANAME	MODNAME ".meta"
 
 static lua_State *state;
 
@@ -417,7 +417,7 @@ static struct ubus_object* ubus_lua_load_object(lua_State *L)
 	obj->o.type->id = 0;
 	obj->o.type->methods = obj->o.methods;
 
-	/* create the he callback lookup table */
+	/* create the callback lookup table */
 	lua_createtable(L, 1, 0);
 	lua_getglobal(L, "__ubus_cb");
 	lua_pushvalue(L, -2);
