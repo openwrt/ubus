@@ -289,6 +289,8 @@ ubus_method_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	lua_getglobal(state, "__ubus_cb");
 	lua_rawgeti(state, -1, o->r);
 	lua_getfield(state, -1, method);
+	lua_remove(state, -2);
+	lua_remove(state, -2);
 
 	if (lua_isfunction(state, -1)) {
 		lua_pushlightuserdata(state, req);
@@ -297,7 +299,9 @@ ubus_method_handler(struct ubus_context *ctx, struct ubus_object *obj,
 		else
 			ubus_lua_parse_blob_array(state, blob_data(msg), blob_len(msg), true);
 		lua_call(state, 2, 0);
-	}
+	} else
+		lua_pop(state, 1);
+
 	return 0;
 }
 
