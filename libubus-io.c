@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2011-2014 Felix Fietkau <nbd@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -54,12 +54,37 @@ static void wait_data(int fd, bool write)
 	poll(&pfd, 1, 0);
 }
 
-static int writev_retry(int fd, struct iovec *iov, int iov_len)
+static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 {
+	static struct {
+		struct cmsghdr h;
+		int fd;
+	} fd_buf = {
+		.h = {
+			.cmsg_len = sizeof(fd_buf),
+			.cmsg_level = SOL_SOCKET,
+			.cmsg_type = SCM_RIGHTS,
+		}
+	};
+	struct msghdr msghdr = {
+		.msg_iov = iov,
+		.msg_iovlen = iov_len,
+		.msg_control = &fd_buf,
+		.msg_controllen = sizeof(fd_buf),
+	};
 	int len = 0;
 
 	do {
-		int cur_len = writev(fd, iov, iov_len);
+		int cur_len;
+
+		if (sock_fd < 0) {
+			msghdr.msg_control = NULL;
+			msghdr.msg_controllen = 0;
+		} else {
+			fd_buf.fd = sock_fd;
+		}
+
+		cur_len = sendmsg(fd, &msghdr, 0);
 		if (cur_len < 0) {
 			switch(errno) {
 			case EAGAIN:
@@ -72,6 +97,10 @@ static int writev_retry(int fd, struct iovec *iov, int iov_len)
 			}
 			continue;
 		}
+
+		if (len > 0)
+			sock_fd = -1;
+
 		len += cur_len;
 		while (cur_len >= iov->iov_len) {
 			cur_len -= iov->iov_len;
@@ -88,7 +117,7 @@ static int writev_retry(int fd, struct iovec *iov, int iov_len)
 }
 
 int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
-			   struct blob_attr *msg, int cmd, uint32_t peer)
+			   struct blob_attr *msg, int cmd, uint32_t peer, int fd)
 {
 	struct ubus_msghdr hdr;
 	struct iovec iov[2] = {
@@ -109,22 +138,45 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	iov[1].iov_base = (char *) msg;
 	iov[1].iov_len = blob_raw_len(msg);
 
-	ret = writev_retry(ctx->sock.fd, iov, ARRAY_SIZE(iov));
+	ret = writev_retry(ctx->sock.fd, iov, ARRAY_SIZE(iov), fd);
 	if (ret < 0)
 		ctx->sock.eof = true;
 
 	return ret;
 }
 
-static int recv_retry(int fd, struct iovec *iov, bool wait)
+static int recv_retry(int fd, struct iovec *iov, bool wait, int *recv_fd)
 {
 	int bytes, total = 0;
+	static struct {
+		struct cmsghdr h;
+		int fd;
+	} fd_buf = {
+		.h = {
+			.cmsg_type = SCM_RIGHTS,
+			.cmsg_level = SOL_SOCKET,
+			.cmsg_len = sizeof(fd_buf),
+		},
+	};
+	struct msghdr msghdr = {
+		.msg_iov = iov,
+		.msg_iovlen = 1,
+	};
 
 	while (iov->iov_len > 0) {
 		if (wait)
 			wait_data(fd, false);
 
-		bytes = read(fd, iov->iov_base, iov->iov_len);
+		if (recv_fd) {
+			msghdr.msg_control = &fd_buf;
+			msghdr.msg_controllen = sizeof(fd_buf);
+		} else {
+			msghdr.msg_control = NULL;
+			msghdr.msg_controllen = 0;
+		}
+
+		fd_buf.fd = -1;
+		bytes = recvmsg(fd, &msghdr, 0);
 		if (!bytes)
 			return -1;
 
@@ -140,6 +192,11 @@ static int recv_retry(int fd, struct iovec *iov, bool wait)
 		}
 		if (!wait && !bytes)
 			return 0;
+
+		if (recv_fd)
+			*recv_fd = fd_buf.fd;
+
+		recv_fd = NULL;
 
 		wait = true;
 		iov->iov_len -= bytes;
@@ -166,14 +223,14 @@ static bool ubus_validate_hdr(struct ubus_msghdr *hdr)
 	return true;
 }
 
-static bool get_next_msg(struct ubus_context *ctx)
+static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 {
 	struct iovec iov = STATIC_IOV(ctx->msgbuf.hdr);
 	int r;
 
 	/* receive header + start attribute */
 	iov.iov_len += sizeof(struct blob_attr);
-	r = recv_retry(ctx->sock.fd, &iov, false);
+	r = recv_retry(ctx->sock.fd, &iov, false, recv_fd);
 	if (r <= 0) {
 		if (r < 0)
 			ctx->sock.eof = true;
@@ -182,7 +239,7 @@ static bool get_next_msg(struct ubus_context *ctx)
 	}
 
 	iov.iov_len = blob_len(ubus_msghdr_data(&ctx->msgbuf.hdr));
-	if (iov.iov_len > 0 && !recv_retry(ctx->sock.fd, &iov, true))
+	if (iov.iov_len > 0 && !recv_retry(ctx->sock.fd, &iov, true, NULL))
 		return false;
 
 	return ubus_validate_hdr(&ctx->msgbuf.hdr);
@@ -192,9 +249,10 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 {
 	struct ubus_context *ctx = container_of(u, struct ubus_context, sock);
 	struct ubus_msghdr *hdr = &ctx->msgbuf.hdr;
+	int recv_fd = -1;
 
-	while (get_next_msg(ctx)) {
-		ubus_process_msg(ctx, hdr);
+	while (get_next_msg(ctx, &recv_fd)) {
+		ubus_process_msg(ctx, hdr, recv_fd);
 		if (uloop_cancelled)
 			break;
 	}

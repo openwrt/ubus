@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2011-2014 Felix Fietkau <nbd@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -11,6 +11,7 @@
  * GNU General Public License for more details.
  */
 
+#include <unistd.h>
 #include "libubus.h"
 #include "libubus-internal.h"
 
@@ -61,7 +62,7 @@ int __hidden ubus_start_request(struct ubus_context *ctx, struct ubus_request *r
 	req->ctx = ctx;
 	req->peer = peer;
 	req->seq = ++ctx->request_seq;
-	return ubus_send_msg(ctx, req->seq, msg, cmd, peer);
+	return ubus_send_msg(ctx, req->seq, msg, cmd, peer, -1);
 }
 
 void ubus_abort_request(struct ubus_context *ctx, struct ubus_request *req)
@@ -184,7 +185,7 @@ void ubus_complete_deferred_request(struct ubus_context *ctx, struct ubus_reques
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_STATUS, ret);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, req->object);
-	ubus_send_msg(ctx, req->seq, b.head, UBUS_MSG_STATUS, req->peer);
+	ubus_send_msg(ctx, req->seq, b.head, UBUS_MSG_STATUS, req->peer, req->fd);
 }
 
 int ubus_send_reply(struct ubus_context *ctx, struct ubus_request_data *req,
@@ -195,7 +196,7 @@ int ubus_send_reply(struct ubus_context *ctx, struct ubus_request_data *req,
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, req->object);
 	blob_put(&b, UBUS_ATTR_DATA, blob_data(msg), blob_len(msg));
-	ret = ubus_send_msg(ctx, req->seq, b.head, UBUS_MSG_DATA, req->peer);
+	ret = ubus_send_msg(ctx, req->seq, b.head, UBUS_MSG_DATA, req->peer, -1);
 	if (ret < 0)
 		return UBUS_STATUS_NO_DATA;
 
@@ -428,7 +429,7 @@ static void ubus_process_notify_status(struct ubus_request *req, int id, struct 
 		ubus_set_req_status(req, 0);
 }
 
-void __hidden ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr)
+void __hidden ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr, int fd)
 {
 	struct ubus_request *req;
 	int id = -1;
@@ -438,6 +439,13 @@ void __hidden ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr 
 		req = ubus_find_request(ctx, hdr->seq, hdr->peer, &id);
 		if (!req)
 			break;
+
+		if (fd >= 0) {
+			if (req->fd_cb)
+				req->fd_cb(req, fd);
+			else
+				close(fd);
+		}
 
 		if (id >= 0)
 			ubus_process_notify_status(req, id, hdr);

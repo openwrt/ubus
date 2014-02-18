@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2011-2014 Felix Fietkau <nbd@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -84,13 +84,13 @@ ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr)
 }
 
 void __hidden
-ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr)
+ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr, int fd)
 {
 
 	switch(hdr->type) {
 	case UBUS_MSG_STATUS:
 	case UBUS_MSG_DATA:
-		ubus_process_req_msg(ctx, hdr);
+		ubus_process_req_msg(ctx, hdr, fd);
 		break;
 
 	case UBUS_MSG_INVOKE:
@@ -113,7 +113,7 @@ void __hidden ubus_process_pending_msg(struct ubus_context *ctx)
 	while (!list_empty(&ctx->pending)) {
 		pending = list_first_entry(&ctx->pending, struct ubus_pending_msg, list);
 		list_del(&pending->list);
-		ubus_process_msg(ctx, &pending->hdr);
+		ubus_process_msg(ctx, &pending->hdr, -1);
 		free(pending);
 		if (ctx->stack_depth > 2)
 			break;

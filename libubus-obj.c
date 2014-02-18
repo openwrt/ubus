@@ -46,7 +46,9 @@ static void
 ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 		    struct ubus_object *obj, struct blob_attr **attrbuf)
 {
-	struct ubus_request_data req = {};
+	struct ubus_request_data req = {
+		.fd = -1,
+	};
 	int method;
 	int ret;
 	bool no_reply = false;

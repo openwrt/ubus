@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2011-2014 Felix Fietkau <nbd@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -53,6 +53,7 @@ typedef void (*ubus_event_handler_t)(struct ubus_context *ctx, struct ubus_event
 				     const char *type, struct blob_attr *msg);
 typedef void (*ubus_data_handler_t)(struct ubus_request *req,
 				    int type, struct blob_attr *msg);
+typedef void (*ubus_fd_handler_t)(struct ubus_request *req, int fd);
 typedef void (*ubus_complete_handler_t)(struct ubus_request *req, int ret);
 typedef void (*ubus_notify_complete_handler_t)(struct ubus_notify_request *req,
 					       int idx, int ret);
@@ -155,7 +156,10 @@ struct ubus_request_data {
 	uint32_t object;
 	uint32_t peer;
 	uint16_t seq;
+
+	/* internal use */
 	bool deferred;
+	int fd;
 };
 
 struct ubus_request {
@@ -173,6 +177,7 @@ struct ubus_request {
 
 	ubus_data_handler_t raw_data_cb;
 	ubus_data_handler_t data_cb;
+	ubus_fd_handler_t fd_cb;
 	ubus_complete_handler_t complete_cb;
 
 	struct ubus_context *ctx;
@@ -273,6 +278,12 @@ static inline void ubus_defer_request(struct ubus_context *ctx,
 {
     memcpy(new_req, req, sizeof(*req));
     req->deferred = true;
+}
+
+static inline void ubus_request_set_fd(struct ubus_context *ctx,
+				       struct ubus_request_data *req, int fd)
+{
+    req->fd = fd;
 }
 
 void ubus_complete_deferred_request(struct ubus_context *ctx,
