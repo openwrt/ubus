@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2011-2014 Felix Fietkau <nbd@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -12,6 +12,7 @@
  */
 
 #include <unistd.h>
+#include <signal.h>
 
 #include <libubox/blobmsg_json.h>
 #include "libubus.h"
@@ -34,18 +35,44 @@ static const struct blobmsg_policy hello_policy[] = {
 struct hello_request {
 	struct ubus_request_data req;
 	struct uloop_timeout timeout;
+	int fd;
+	int idx;
 	char data[];
 };
+
+static void test_hello_fd_reply(struct uloop_timeout *t)
+{
+	struct hello_request *req = container_of(t, struct hello_request, timeout);
+	char *data;
+
+	data = alloca(strlen(req->data) + 32);
+	sprintf(data, "msg%d: %s\n", ++req->idx, req->data);
+	if (write(req->fd, data, strlen(data)) < 0) {
+		close(req->fd);
+		free(req);
+		return;
+	}
+
+	uloop_timeout_set(&req->timeout, 1000);
+}
 
 static void test_hello_reply(struct uloop_timeout *t)
 {
 	struct hello_request *req = container_of(t, struct hello_request, timeout);
+	int fds[2];
 
 	blob_buf_init(&b, 0);
 	blobmsg_add_string(&b, "message", req->data);
 	ubus_send_reply(ctx, &req->req, b.head);
+
+	pipe(fds);
+	ubus_request_set_fd(ctx, &req->req, fds[0]);
 	ubus_complete_deferred_request(ctx, &req->req, 0);
-	free(req);
+	close(fds[0]);
+	req->fd = fds[1];
+
+	req->timeout.cb = test_hello_fd_reply;
+	test_hello_fd_reply(t);
 }
 
 static int test_hello(struct ubus_context *ctx, struct ubus_object *obj,
@@ -172,6 +199,7 @@ int main(int argc, char **argv)
 	argv += optind;
 
 	uloop_init();
+	signal(SIGPIPE, SIG_IGN);
 
 	ctx = ubus_connect(ubus_socket);
 	if (!ctx) {
