@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2011-2014 Felix Fietkau <nbd@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -12,6 +12,8 @@
  */
 
 #include <arpa/inet.h>
+#include <unistd.h>
+
 #include "ubusd.h"
 
 struct blob_buf b;
@@ -36,6 +38,15 @@ static struct blob_attr **ubus_parse_msg(struct blob_attr *msg)
 {
 	blob_parse(msg, attrbuf, ubus_policy, UBUS_ATTR_MAX);
 	return attrbuf;
+}
+
+static void ubus_msg_close_fd(struct ubus_msg_buf *ub)
+{
+	if (ub->fd < 0)
+		return;
+
+	close(ub->fd);
+	ub->fd = -1;
 }
 
 static void ubus_msg_init(struct ubus_msg_buf *ub, uint8_t type, uint16_t seq, uint32_t peer)
@@ -409,6 +420,9 @@ void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub
 	if (ub->hdr.type < __UBUS_MSG_LAST)
 		cb = handlers[ub->hdr.type];
 
+	if (ub->hdr.type != UBUS_MSG_STATUS)
+		ubus_msg_close_fd(ub);
+
 	if (cb)
 		ret = cb(cl, ub, ubus_parse_msg(ub->data));
 	else
@@ -434,6 +448,7 @@ struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
 	INIT_LIST_HEAD(&cl->objects);
 	cl->sock.fd = fd;
 	cl->sock.cb = cb;
+	cl->pending_msg_fd = -1;
 
 	if (!ubus_alloc_id(&clients, &cl->id, 0))
 		goto free;

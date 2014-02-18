@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2011-2014 Felix Fietkau <nbd@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -31,6 +31,7 @@ struct ubus_msg_buf {
 	uint32_t refcount; /* ~0: uses external data buffer */
 	struct ubus_msghdr hdr;
 	struct blob_attr *data;
+	int fd;
 	int len;
 };
 
@@ -45,6 +46,7 @@ struct ubus_client {
 
 	struct ubus_msg_buf *pending_msg;
 	int pending_msg_offset;
+	int pending_msg_fd;
 	struct {
 		struct ubus_msghdr hdr;
 		struct blob_attr data;

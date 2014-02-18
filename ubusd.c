@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2011-2014 Felix Fietkau <nbd@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -14,6 +14,9 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
+#ifdef FreeBSD
+#include <sys/param.h>
+#endif
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -59,6 +62,8 @@ struct ubus_msg_buf *ubus_msg_new(void *data, int len, bool shared)
 	if (!ub)
 		return NULL;
 
+	ub->fd = -1;
+
 	if (shared) {
 		ub->refcount = ~0;
 		ub->data = data;
@@ -78,6 +83,9 @@ void ubus_msg_free(struct ubus_msg_buf *ub)
 	switch (ub->refcount) {
 	case 1:
 	case ~0:
+		if (ub->fd >= 0)
+			close(ub->fd);
+
 		free(ub);
 		break;
 	default:
@@ -88,14 +96,37 @@ void ubus_msg_free(struct ubus_msg_buf *ub)
 
 static int ubus_msg_writev(int fd, struct ubus_msg_buf *ub, int offset)
 {
-	struct iovec iov[2];
+	static struct iovec iov[2];
+	static struct {
+		struct cmsghdr h;
+		int fd;
+	} fd_buf = {
+		.h = {
+			.cmsg_len = sizeof(fd_buf),
+			.cmsg_level = SOL_SOCKET,
+			.cmsg_type = SCM_RIGHTS,
+		},
+	};
+	struct msghdr msghdr = {
+		.msg_iov = iov,
+		.msg_iovlen = ARRAY_SIZE(iov),
+		.msg_control = &fd_buf,
+		.msg_controllen = sizeof(fd_buf),
+	};
+
+	fd_buf.fd = ub->fd;
+	if (ub->fd < 0) {
+		msghdr.msg_control = NULL;
+		msghdr.msg_controllen = 0;
+	}
 
 	if (offset < sizeof(ub->hdr)) {
 		iov[0].iov_base = ((char *) &ub->hdr) + offset;
 		iov[0].iov_len = sizeof(ub->hdr) - offset;
 		iov[1].iov_base = (char *) ub->data;
 		iov[1].iov_len = ub->len;
-		return writev(fd, iov, 2);
+
+		return sendmsg(fd, &msghdr, 0);
 	} else {
 		offset -= sizeof(ub->hdr);
 		return write(fd, ((char *) ub->data) + offset, ub->len - offset);
@@ -160,6 +191,8 @@ static void handle_client_disconnect(struct ubus_client *cl)
 		ubus_msg_dequeue(cl);
 
 	ubusd_proto_free_client(cl);
+	if (cl->pending_msg_fd >= 0)
+		close(cl->pending_msg_fd);
 	uloop_fd_delete(&cl->sock);
 	close(cl->sock.fd);
 	free(cl);
@@ -169,6 +202,21 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 {
 	struct ubus_client *cl = container_of(sock, struct ubus_client, sock);
 	struct ubus_msg_buf *ub;
+	static struct iovec iov;
+	static struct {
+		struct cmsghdr h;
+		int fd;
+	} fd_buf = {
+		.h = {
+			.cmsg_type = SCM_RIGHTS,
+			.cmsg_level = SOL_SOCKET,
+			.cmsg_len = sizeof(fd_buf),
+		}
+	};
+	struct msghdr msghdr = {
+		.msg_iov = &iov,
+		.msg_iovlen = 1,
+	};
 
 	/* first try to tx more pending data */
 	while ((ub = ubus_msg_head(cl))) {
@@ -203,9 +251,25 @@ retry:
 		int offset = cl->pending_msg_offset;
 		int bytes;
 
-		bytes = read(sock->fd, (char *)&cl->hdrbuf + offset, sizeof(cl->hdrbuf) - offset);
+		fd_buf.fd = -1;
+
+		iov.iov_base = &cl->hdrbuf + offset;
+		iov.iov_len = sizeof(cl->hdrbuf) - offset;
+
+		if (cl->pending_msg_fd < 0) {
+			msghdr.msg_control = &fd_buf;
+			msghdr.msg_controllen = sizeof(fd_buf);
+		} else {
+			msghdr.msg_control = NULL;
+			msghdr.msg_controllen = 0;
+		}
+
+		bytes = recvmsg(sock->fd, &msghdr, 0);
 		if (bytes < 0)
 			goto out;
+
+		if (fd_buf.fd >= 0)
+			cl->pending_msg_fd = fd_buf.fd;
 
 		cl->pending_msg_offset += bytes;
 		if (cl->pending_msg_offset < sizeof(cl->hdrbuf))
@@ -240,6 +304,8 @@ retry:
 		}
 
 		/* accept message */
+		ub->fd = cl->pending_msg_fd;
+		cl->pending_msg_fd = -1;
 		cl->pending_msg_offset = 0;
 		cl->pending_msg = NULL;
 		ubusd_proto_receive_message(cl, ub);
