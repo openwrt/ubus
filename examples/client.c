@@ -14,6 +14,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <libubox/ustream.h>
+
 #include "libubus.h"
 
 static struct ubus_context *ctx;
@@ -57,8 +59,42 @@ static struct uloop_timeout notify_timer = {
 	.cb = test_client_notify_cb,
 };
 
+static void test_client_fd_data_cb(struct ustream *s, int bytes)
+{
+	char *data, *sep;
+	int len;
+
+	data = ustream_get_read_buf(s, &len);
+	if (len < 1)
+		return;
+
+	sep = strchr(data, '\n');
+	if (!sep)
+		return;
+
+	*sep = 0;
+	fprintf(stderr, "Got line: %s\n", data);
+	ustream_consume(s, sep + 1 - data);
+}
+
+static void test_client_fd_cb(struct ubus_request *req, int fd)
+{
+	static struct ustream_fd test_fd;
+
+	fprintf(stderr, "Got fd from the server, watching...\n");
+
+	test_fd.stream.notify_read = test_client_fd_data_cb;
+	ustream_fd_init(&test_fd, fd);
+}
+
+static void test_client_complete_cb(struct ubus_request *req, int ret)
+{
+	fprintf(stderr, "completed request, ret: %d\n", ret);
+}
+
 static void client_main(void)
 {
+	static struct ubus_request req;
 	uint32_t id;
 	int ret;
 
@@ -77,6 +113,14 @@ static void client_main(void)
 	blobmsg_add_u32(&b, "id", test_client_object.id);
 	ubus_invoke(ctx, id, "watch", b.head, NULL, 0, 3000);
 	test_client_notify_cb(&notify_timer);
+
+	blob_buf_init(&b, 0);
+	blobmsg_add_string(&b, "msg", "blah");
+	ubus_invoke_async(ctx, id, "hello", b.head, &req);
+	req.fd_cb = test_client_fd_cb;
+	req.complete_cb = test_client_complete_cb;
+	ubus_complete_request_async(ctx, &req);
+
 	uloop_run();
 }
 
