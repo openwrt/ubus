@@ -142,6 +142,9 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	if (ret < 0)
 		ctx->sock.eof = true;
 
+	if (fd >= 0)
+		close(fd);
+
 	return ret;
 }
 

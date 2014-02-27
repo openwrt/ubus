@@ -68,7 +68,6 @@ static void test_hello_reply(struct uloop_timeout *t)
 	pipe(fds);
 	ubus_request_set_fd(ctx, &req->req, fds[0]);
 	ubus_complete_deferred_request(ctx, &req->req, 0);
-	close(fds[0]);
 	req->fd = fds[1];
 
 	req->timeout.cb = test_hello_fd_reply;
