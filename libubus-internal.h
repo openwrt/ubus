@@ -14,8 +14,6 @@
 #ifndef __LIBUBUS_IO_H
 #define __LIBUBUS_IO_H
 
-#define __hidden __attribute__((visibility ("hidden")))
-
 extern struct blob_buf b;
 extern const struct ubus_method watch_method;
 
