@@ -114,38 +114,32 @@ static void ubus_sync_req_cb(struct ubus_request *req, int ret)
 	uloop_end();
 }
 
-struct ubus_sync_req_cb {
-	struct uloop_timeout timeout;
-	struct ubus_request *req;
-};
-
-static void ubus_sync_req_timeout_cb(struct uloop_timeout *timeout)
+static int64_t get_time_msec(void)
 {
-	struct ubus_sync_req_cb *cb;
+	struct timespec ts;
+	int64_t val;
 
-	cb = container_of(timeout, struct ubus_sync_req_cb, timeout);
-	ubus_set_req_status(cb->req, UBUS_STATUS_TIMEOUT);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	val = (int64_t) ts.tv_sec * 1000LL;
+	val += ts.tv_nsec / 1000000LL;
+	return val;
 }
 
 int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
-			  int timeout)
+			  int req_timeout)
 {
-	struct ubus_sync_req_cb cb;
 	ubus_complete_handler_t complete_cb = req->complete_cb;
 	bool registered = ctx->sock.registered;
 	int status = UBUS_STATUS_NO_DATA;
+	int64_t timeout = 0, time_end = 0;
 
 	if (!registered) {
 		uloop_init();
 		ubus_add_uloop(ctx);
 	}
 
-	if (timeout) {
-		memset(&cb, 0, sizeof(cb));
-		cb.req = req;
-		cb.timeout.cb = ubus_sync_req_timeout_cb;
-		uloop_timeout_set(&cb.timeout, timeout);
-	}
+	if (req_timeout)
+		time_end = get_time_msec() + req_timeout;
 
 	ubus_complete_request_async(ctx, req);
 	req->complete_cb = ubus_sync_req_cb;
@@ -153,16 +147,22 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 	ctx->stack_depth++;
 	while (!req->status_msg) {
 		bool cancelled = uloop_cancelled;
+
 		uloop_cancelled = false;
-		uloop_run();
+		if (req_timeout) {
+			timeout = time_end - get_time_msec();
+			if (timeout <= 0) {
+				ubus_set_req_status(req, UBUS_STATUS_TIMEOUT);
+				break;
+			}
+		}
+		ubus_poll_data(ctx, (unsigned int) timeout);
+
 		uloop_cancelled = cancelled;
 	}
 	ctx->stack_depth--;
 	if (ctx->stack_depth)
 		uloop_cancelled = true;
-
-	if (timeout)
-		uloop_timeout_cancel(&cb.timeout);
 
 	if (req->status_msg)
 		status = req->status_code;

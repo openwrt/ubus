@@ -27,5 +27,7 @@ int __hidden ubus_start_request(struct ubus_context *ctx, struct ubus_request *r
 void ubus_process_obj_msg(struct ubus_context*ctx, struct ubus_msghdr *hdr);
 void ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr, int fd);
 void ubus_process_pending_msg(struct ubus_context *ctx);
+void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout);
+
 
 #endif

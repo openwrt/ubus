@@ -264,6 +264,17 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 		ctx->connection_lost(ctx);
 }
 
+void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)
+{
+	struct pollfd pfd = {
+		.fd = ctx->sock.fd,
+		.events = POLLIN | POLLERR,
+	};
+
+	poll(&pfd, 1, timeout);
+	ubus_handle_data(&ctx->sock, ULOOP_READ);
+}
+
 static void
 ubus_refresh_state(struct ubus_context *ctx)
 {
