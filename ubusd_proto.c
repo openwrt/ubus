@@ -165,7 +165,7 @@ static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, stru
 
 	s = blob_nest_start(&b, UBUS_ATTR_SIGNATURE);
 	list_for_each_entry(m, &obj->type->methods, list)
-		blob_put(&b, blob_id(m->data), blob_data(m->data), blob_len(m->data));
+		blobmsg_add_blob(&b, m->data);
 	blob_nest_end(&b, s);
 
 	ubus_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
