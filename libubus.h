@@ -67,24 +67,32 @@ typedef void (*ubus_connect_handler_t)(struct ubus_context *ctx);
 		.methods = _methods			\
 	}
 
+#define __UBUS_METHOD_NOARG(_name, _handler)		\
+	.name = _name,					\
+	.handler = _handler
+
+#define __UBUS_METHOD(_name, _handler, _policy)		\
+	__UBUS_METHOD_NOARG(_name, _handler),		\
+	.policy = _policy,				\
+	.n_policy = ARRAY_SIZE(_policy)
+
 #define UBUS_METHOD(_name, _handler, _policy)		\
+	{ __UBUS_METHOD(_name, _handler, _policy) }
+
+#define UBUS_METHOD_MASK(_name, _handler, _policy, _mask) \
 	{						\
-		.name = _name,				\
-		.handler = _handler,			\
-		.policy = _policy,			\
-		.n_policy = ARRAY_SIZE(_policy)		\
+		__UBUS_METHOD(_name, _handler, _policy),\
+		.mask = _mask				\
 	}
 
 #define UBUS_METHOD_NOARG(_name, _handler)		\
-	{						\
-		.name = _name,				\
-		.handler = _handler,			\
-	}
+	{ __UBUS_METHOD_NOARG(_name, _handler) }
 
 struct ubus_method {
 	const char *name;
 	ubus_handler_t handler;
 
+	unsigned long mask;
 	const struct blobmsg_policy *policy;
 	int n_policy;
 };

@@ -146,8 +146,12 @@ static void ubus_push_method_data(const struct ubus_method *m)
 
 	mtbl = blobmsg_open_table(&b, m->name);
 
-	for (i = 0; i < m->n_policy; i++)
+	for (i = 0; i < m->n_policy; i++) {
+		if (m->mask && !(m->mask & (1 << i)))
+			continue;
+
 		blobmsg_add_u32(&b, m->policy[i].name, m->policy[i].type);
+	}
 
 	blobmsg_close_table(&b, mtbl);
 }
