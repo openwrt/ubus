@@ -285,6 +285,7 @@ ubus_method_handler(struct ubus_context *ctx, struct ubus_object *obj,
 		struct blob_attr *msg)
 {
 	struct ubus_lua_object *o = container_of(obj, struct ubus_lua_object, o);
+	int rv = 0;
 
 	lua_getglobal(state, "__ubus_cb");
 	lua_rawgeti(state, -1, o->r);
@@ -298,11 +299,13 @@ ubus_method_handler(struct ubus_context *ctx, struct ubus_object *obj,
 			lua_pushnil(state);
 		else
 			ubus_lua_parse_blob_array(state, blob_data(msg), blob_len(msg), true);
-		lua_call(state, 2, 0);
+		lua_call(state, 2, 1);
+		if (lua_isnumber(state, -1))
+			rv = lua_tonumber(state, -1);
 	} else
 		lua_pop(state, 1);
 
-	return 0;
+	return rv;
 }
 
 static int lua_gettablelen(lua_State *L, int index)
