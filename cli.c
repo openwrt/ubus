@@ -184,6 +184,106 @@ static int ubus_cli_send(struct ubus_context *ctx, int argc, char **argv)
 	return ubus_send_event(ctx, argv[0], b.head);
 }
 
+struct cli_wait_data {
+	struct uloop_timeout timeout;
+	struct ubus_event_handler ev;
+	char **pending;
+	int n_pending;
+};
+
+static void wait_check_object(struct cli_wait_data *data, const char *path)
+{
+	int i;
+
+	for (i = 0; i < data->n_pending; i++) {
+		if (strcmp(path, data->pending[i]) != 0)
+			continue;
+
+		data->n_pending--;
+		if (i == data->n_pending)
+			break;
+
+		memmove(&data->pending[i], &data->pending[i + 1],
+			(data->n_pending - i) * sizeof(*data->pending));
+		i--;
+	}
+
+	if (!data->n_pending)
+		uloop_end();
+}
+
+static void wait_event_cb(struct ubus_context *ctx, struct ubus_event_handler *ev,
+			  const char *type, struct blob_attr *msg)
+{
+	static const struct blobmsg_policy policy = {
+		"path", BLOBMSG_TYPE_STRING
+	};
+	struct cli_wait_data *data = container_of(ev, struct cli_wait_data, ev);
+	struct blob_attr *attr;
+	const char *path;
+
+	if (strcmp(type, "ubus.object.add") != 0)
+		return;
+
+	blobmsg_parse(&policy, 1, &attr, blob_data(msg), blob_len(msg));
+	if (!attr)
+		return;
+
+	path = blobmsg_data(attr);
+	wait_check_object(data, path);
+}
+
+static void wait_list_cb(struct ubus_context *ctx, struct ubus_object_data *obj, void *priv)
+{
+	struct cli_wait_data *data = priv;
+
+	wait_check_object(data, obj->path);
+}
+
+
+static void wait_timeout(struct uloop_timeout *timeout)
+{
+	uloop_end();
+}
+
+static int ubus_cli_wait_for(struct ubus_context *ctx, int argc, char **argv)
+{
+	struct cli_wait_data data = {
+		.timeout.cb = wait_timeout,
+		.ev.cb = wait_event_cb,
+		.pending = argv,
+		.n_pending = argc,
+	};
+	int ret;
+
+	if (argc < 1)
+		return -2;
+
+	uloop_init();
+	ubus_add_uloop(ctx);
+
+	ret = ubus_lookup(ctx, NULL, wait_list_cb, &data);
+	if (ret)
+		return ret;
+
+	if (!data.n_pending)
+		return ret;
+
+	ret = ubus_register_event_handler(ctx, &data.ev, "ubus.object.add");
+	if (ret)
+		return ret;
+
+	uloop_timeout_set(&data.timeout, timeout * 1000);
+	uloop_run();
+	uloop_done();
+
+	if (data.n_pending)
+		return UBUS_STATUS_TIMEOUT;
+
+	return ret;
+}
+
+
 static int usage(const char *prog)
 {
 	fprintf(stderr,
@@ -199,6 +299,7 @@ static int usage(const char *prog)
 		" - call <path> <method> [<message>]	Call an object method\n"
 		" - listen [<path>...]			Listen for events\n"
 		" - send <type> [<message>]		Send an event\n"
+		" - wait_for <object> [<object>...]	Wait for multiple objects to appear on ubus\n"
 		"\n", prog);
 	return 1;
 }
@@ -212,6 +313,7 @@ struct {
 	{ "call", ubus_cli_call },
 	{ "listen", ubus_cli_listen },
 	{ "send", ubus_cli_send },
+	{ "wait_for", ubus_cli_wait_for },
 };
 
 int main(int argc, char **argv)
