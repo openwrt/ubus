@@ -140,6 +140,7 @@ struct ubus_context {
 	struct list_head pending;
 
 	struct uloop_fd sock;
+	struct uloop_timeout pending_timer;
 
 	uint32_t local_id;
 	uint16_t request_seq;

@@ -81,6 +81,7 @@ ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr)
 
 	memcpy(&pending->hdr, hdr, sizeof(*hdr) + blob_raw_len(ubus_msghdr_data(hdr)));
 	list_add(&pending->list, &ctx->pending);
+	uloop_timeout_set(&ctx->pending_timer, 1);
 }
 
 void __hidden
@@ -96,7 +97,7 @@ ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr, int fd)
 	case UBUS_MSG_INVOKE:
 	case UBUS_MSG_UNSUBSCRIBE:
 	case UBUS_MSG_NOTIFY:
-		if (ctx->stack_depth > 2) {
+		if (ctx->stack_depth) {
 			ubus_queue_msg(ctx, hdr);
 			break;
 		}
@@ -106,17 +107,16 @@ ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr, int fd)
 	}
 }
 
-void __hidden ubus_process_pending_msg(struct ubus_context *ctx)
+static void ubus_process_pending_msg(struct uloop_timeout *timeout)
 {
+	struct ubus_context *ctx = container_of(timeout, struct ubus_context, pending_timer);
 	struct ubus_pending_msg *pending;
 
-	while (!list_empty(&ctx->pending)) {
+	while (!ctx->stack_depth && !list_empty(&ctx->pending)) {
 		pending = list_first_entry(&ctx->pending, struct ubus_pending_msg, list);
 		list_del(&pending->list);
 		ubus_process_msg(ctx, &pending->hdr, -1);
 		free(pending);
-		if (ctx->stack_depth > 2)
-			break;
 	}
 }
 
@@ -272,6 +272,7 @@ static int _ubus_connect(struct ubus_context *ctx, const char *path)
 	ctx->sock.fd = -1;
 	ctx->sock.cb = ubus_handle_data;
 	ctx->connection_lost = ubus_default_connection_lost;
+	ctx->pending_timer.cb = ubus_process_pending_msg;
 
 	INIT_LIST_HEAD(&ctx->requests);
 	INIT_LIST_HEAD(&ctx->pending);

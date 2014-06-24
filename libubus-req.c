@@ -174,9 +174,6 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 	if (!registered)
 		uloop_fd_delete(&ctx->sock);
 
-	if (!ctx->stack_depth)
-		ubus_process_pending_msg(ctx);
-
 	return status;
 }
 
