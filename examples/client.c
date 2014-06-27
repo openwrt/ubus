@@ -17,6 +17,7 @@
 #include <libubox/ustream.h>
 
 #include "libubus.h"
+#include "count.h"
 
 static struct ubus_context *ctx;
 static struct blob_buf b;
@@ -55,8 +56,83 @@ static void test_client_notify_cb(struct uloop_timeout *timeout)
 	uloop_timeout_set(timeout, 1000);
 }
 
+enum {
+	RETURN_CODE,
+	__RETURN_MAX,
+};
+
+static const struct blobmsg_policy return_policy[__RETURN_MAX] = {
+	[RETURN_CODE] = { .name = "rc", .type = BLOBMSG_TYPE_INT32 },
+};
+
+static void test_count_data_cb(struct ubus_request *req,
+				    int type, struct blob_attr *msg)
+{
+	struct blob_attr *tb[__RETURN_MAX];
+	int rc;
+	uint32_t count_to = *(uint32_t *)req->priv;
+
+	blobmsg_parse(return_policy, __RETURN_MAX, tb, blob_data(msg), blob_len(msg));
+
+	if (!tb[RETURN_CODE]) {
+		fprintf(stderr, "No return code received from server\n");
+		return;
+	}
+	rc = blobmsg_get_u32(tb[RETURN_CODE]);
+	if (rc)
+		fprintf(stderr, "Corruption of data with count up to '%u'\n", count_to);
+	else
+		fprintf(stderr, "Server validated our count up to '%u'\n", count_to);
+}
+
+static void test_count(struct uloop_timeout *timeout)
+{
+	enum {
+		COUNT_TO_MIN = 10000,
+		COUNT_TO_MAX = 1000000,
+		PROGRESSION  = 100,
+	};
+
+	uint32_t id;
+	static uint32_t count_to = 100000;
+	static int count_progression = PROGRESSION;
+	char *s;
+
+	if (count_to <= COUNT_TO_MIN)
+		count_progression = PROGRESSION;
+	else if (count_to >= COUNT_TO_MAX)
+		count_progression = -PROGRESSION;
+
+	count_to += count_progression;
+
+	s = count_to_number(count_to);
+	if (!s)
+		fprintf(stderr, "Could not allocate memory to count up to '%u'\n", count_to);
+
+	fprintf(stderr, "Sending count up to '%u'; string has length '%u'\n",
+	        count_to, (uint32_t)strlen(s));
+	blob_buf_init(&b, 0);
+	blobmsg_add_u32(&b, "to", count_to);
+	blobmsg_add_string(&b, "string", s);
+
+	if (ubus_lookup_id(ctx, "test", &id)) {
+		fprintf(stderr, "Failed to look up test object\n");
+		return;
+	}
+
+	ubus_invoke(ctx, id, "count", b.head, test_count_data_cb, &count_to, 5000);
+
+	free(s);
+
+	uloop_timeout_set(timeout, 2000);
+}
+
 static struct uloop_timeout notify_timer = {
 	.cb = test_client_notify_cb,
+};
+
+static struct uloop_timeout count_timer = {
+	.cb = test_count,
 };
 
 static void test_client_fd_data_cb(struct ustream *s, int bytes)
@@ -120,6 +196,8 @@ static void client_main(void)
 	req.fd_cb = test_client_fd_cb;
 	req.complete_cb = test_client_complete_cb;
 	ubus_complete_request_async(ctx, &req);
+
+	uloop_timeout_set(&count_timer, 2000);
 
 	uloop_run();
 }

@@ -16,6 +16,7 @@
 
 #include <libubox/blobmsg_json.h>
 #include "libubus.h"
+#include "count.h"
 
 static struct ubus_context *ctx;
 static struct ubus_subscriber test_event;
@@ -149,9 +150,48 @@ static int test_watch(struct ubus_context *ctx, struct ubus_object *obj,
 	return ret;
 }
 
+enum {
+    COUNT_TO,
+    COUNT_STRING,
+    __COUNT_MAX
+};
+
+static const struct blobmsg_policy count_policy[__COUNT_MAX] = {
+    [COUNT_TO] = { .name = "to", .type = BLOBMSG_TYPE_INT32 },
+    [COUNT_STRING] = { .name = "string", .type = BLOBMSG_TYPE_STRING },
+};
+
+static int test_count(struct ubus_context *ctx, struct ubus_object *obj,
+		      struct ubus_request_data *req, const char *method,
+		      struct blob_attr *msg)
+{
+	struct blob_attr *tb[__COUNT_MAX];
+	char *s1, *s2;
+	uint32_t num;
+
+	blobmsg_parse(count_policy, __COUNT_MAX, tb, blob_data(msg), blob_len(msg));
+	if (!tb[COUNT_TO] || !tb[COUNT_STRING])
+		return UBUS_STATUS_INVALID_ARGUMENT;
+
+	num = blobmsg_get_u32(tb[COUNT_TO]);
+	s1 = blobmsg_get_string(tb[COUNT_STRING]);
+	s2 = count_to_number(num);
+	if (!s1 || !s2) {
+		free(s2);
+		return UBUS_STATUS_UNKNOWN_ERROR;
+	}
+	blob_buf_init(&b, 0);
+	blobmsg_add_u32(&b, "rc", strcmp(s1, s2));
+	ubus_send_reply(ctx, req, b.head);
+	free(s2);
+
+	return 0;
+}
+
 static const struct ubus_method test_methods[] = {
 	UBUS_METHOD("hello", test_hello, hello_policy),
 	UBUS_METHOD("watch", test_watch, watch_policy),
+	UBUS_METHOD("count", test_count, count_policy),
 };
 
 static struct ubus_object_type test_object_type =
