@@ -34,10 +34,16 @@ struct ubus_event_handler;
 struct ubus_subscriber;
 struct ubus_notify_request;
 
+struct ubus_msghdr_buf {
+	struct ubus_msghdr hdr;
+	struct blob_attr *data;
+};
+
 static inline struct blob_attr *
 ubus_msghdr_data(struct ubus_msghdr *hdr)
 {
-	return (struct blob_attr *) (hdr + 1);
+	struct ubus_msghdr_buf *hdrbuf = container_of(hdr, typeof(*hdrbuf), hdr);
+	return hdrbuf->data;
 }
 
 typedef void (*ubus_lookup_handler_t)(struct ubus_context *ctx,
@@ -148,10 +154,7 @@ struct ubus_context {
 
 	void (*connection_lost)(struct ubus_context *ctx);
 
-	struct {
-		struct ubus_msghdr hdr;
-		char data[UBUS_MAX_MSGLEN];
-	} msgbuf;
+	struct ubus_msghdr_buf msgbuf;
 };
 
 struct ubus_object_data {

@@ -212,7 +212,7 @@ static int recv_retry(int fd, struct iovec *iov, bool wait, int *recv_fd)
 
 static bool ubus_validate_hdr(struct ubus_msghdr *hdr)
 {
-	struct blob_attr *data = ubus_msghdr_data(hdr);
+	struct blob_attr *data = (struct blob_attr *) (hdr + 1);
 
 	if (hdr->version != 0)
 		return false;
@@ -228,11 +228,14 @@ static bool ubus_validate_hdr(struct ubus_msghdr *hdr)
 
 static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 {
-	struct iovec iov = STATIC_IOV(ctx->msgbuf.hdr);
+	struct {
+		struct ubus_msghdr hdr;
+		struct blob_attr data;
+	} hdrbuf;
+	struct iovec iov = STATIC_IOV(hdrbuf);
 	int r;
 
 	/* receive header + start attribute */
-	iov.iov_len += sizeof(struct blob_attr);
 	r = recv_retry(ctx->sock.fd, &iov, false, recv_fd);
 	if (r <= 0) {
 		if (r < 0)
@@ -241,11 +244,18 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 		return false;
 	}
 
-	iov.iov_len = blob_len(ubus_msghdr_data(&ctx->msgbuf.hdr));
+	if (!ubus_validate_hdr(&hdrbuf.hdr))
+		return false;
+
+	memcpy(&ctx->msgbuf.hdr, &hdrbuf.hdr, sizeof(hdrbuf.hdr));
+	memcpy(ctx->msgbuf.data, &hdrbuf.data, sizeof(hdrbuf.data));
+
+	iov.iov_base = (char *)ctx->msgbuf.data + sizeof(hdrbuf.data);
+	iov.iov_len = blob_len(ctx->msgbuf.data);
 	if (iov.iov_len > 0 && !recv_retry(ctx->sock.fd, &iov, true, NULL))
 		return false;
 
-	return ubus_validate_hdr(&ctx->msgbuf.hdr);
+	return true;
 }
 
 void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)

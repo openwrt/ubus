@@ -40,7 +40,7 @@ struct blob_buf b __hidden = {};
 
 struct ubus_pending_msg {
 	struct list_head list;
-	struct ubus_msghdr hdr;
+	struct ubus_msghdr_buf hdr;
 };
 
 static int ubus_cmp_id(const void *k1, const void *k2, void *ptr)
@@ -75,11 +75,15 @@ ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr)
 {
 	struct ubus_pending_msg *pending;
 
-	pending = calloc(1, sizeof(*pending) + blob_raw_len(ubus_msghdr_data(hdr)));
+	pending = calloc(1, sizeof(*pending));
 	if (!pending)
 		return;
+	pending->hdr.data = calloc(1, blob_raw_len(ubus_msghdr_data(hdr)));
+	if (!pending->hdr.data)
+		return;
 
-	memcpy(&pending->hdr, hdr, sizeof(*hdr) + blob_raw_len(ubus_msghdr_data(hdr)));
+	memcpy(&pending->hdr.hdr, hdr, sizeof(*hdr));
+	memcpy(pending->hdr.data, ubus_msghdr_data(hdr), blob_raw_len(ubus_msghdr_data(hdr)));
 	list_add(&pending->list, &ctx->pending);
 	if (ctx->sock.registered)
 		uloop_timeout_set(&ctx->pending_timer, 1);
@@ -116,7 +120,8 @@ static void ubus_process_pending_msg(struct uloop_timeout *timeout)
 	while (!ctx->stack_depth && !list_empty(&ctx->pending)) {
 		pending = list_first_entry(&ctx->pending, struct ubus_pending_msg, list);
 		list_del(&pending->list);
-		ubus_process_msg(ctx, &pending->hdr, -1);
+		ubus_process_msg(ctx, &pending->hdr.hdr, -1);
+		free(pending->hdr.data);
 		free(pending);
 	}
 }
@@ -275,11 +280,17 @@ static int _ubus_connect(struct ubus_context *ctx, const char *path)
 	ctx->connection_lost = ubus_default_connection_lost;
 	ctx->pending_timer.cb = ubus_process_pending_msg;
 
+	ctx->msgbuf.data = calloc(UBUS_MAX_MSGLEN, sizeof(char));
+	if (!ctx->msgbuf.data)
+		return -1;
+
 	INIT_LIST_HEAD(&ctx->requests);
 	INIT_LIST_HEAD(&ctx->pending);
 	avl_init(&ctx->objects, ubus_cmp_id, false, NULL);
-	if (ubus_reconnect(ctx, path))
+	if (ubus_reconnect(ctx, path)) {
+		free(ctx->msgbuf.data);
 		return -1;
+	}
 
 	return 0;
 }
@@ -343,5 +354,6 @@ void ubus_free(struct ubus_context *ctx)
 {
 	blob_buf_free(&b);
 	close(ctx->sock.fd);
+	free(ctx->msgbuf.data);
 	free(ctx);
 }
