@@ -28,6 +28,8 @@
 
 #define STATIC_IOV(_var) { .iov_base = (char *) &(_var), .iov_len = sizeof(_var) }
 
+#define UBUS_MSGBUF_REDUCTION_INTERVAL	16
+
 static const struct blob_attr_info ubus_policy[UBUS_ATTR_MAX] = {
 	[UBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
 	[UBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
@@ -250,6 +252,17 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 
 	len = blob_raw_len(&hdrbuf.data);
 	if (len > ctx->msgbuf_data_len) {
+		ctx->msgbuf_reduction_counter = UBUS_MSGBUF_REDUCTION_INTERVAL;
+	} else if (ctx->msgbuf_data_len > UBUS_MSG_CHUNK_SIZE) {
+		if (ctx->msgbuf_reduction_counter > 0) {
+			len = -1;
+			--ctx->msgbuf_reduction_counter;
+		} else
+			len = UBUS_MSG_CHUNK_SIZE;
+	} else
+		len = -1;
+
+	if (len > -1) {
 		ctx->msgbuf.data = realloc(ctx->msgbuf.data, len * sizeof(char));
 		if (ctx->msgbuf.data)
 			ctx->msgbuf_data_len = len;
