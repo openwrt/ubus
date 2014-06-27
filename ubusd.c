@@ -29,22 +29,10 @@
 
 #include "ubusd.h"
 
-static struct ubus_msg_buf *ubus_msg_unshare(struct ubus_msg_buf *ub)
-{
-	ub = realloc(ub, sizeof(*ub) + ub->len);
-	if (!ub)
-		return NULL;
-
-	ub->refcount = 1;
-	memcpy(ub + 1, ub->data, ub->len);
-	ub->data = (void *) (ub + 1);
-	return ub;
-}
-
 static struct ubus_msg_buf *ubus_msg_ref(struct ubus_msg_buf *ub)
 {
 	if (ub->refcount == ~0)
-		return ubus_msg_unshare(ub);
+		return ubus_msg_new(ub->data, ub->len, false);
 
 	ub->refcount++;
 	return ub;
