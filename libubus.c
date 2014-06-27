@@ -280,9 +280,10 @@ static int _ubus_connect(struct ubus_context *ctx, const char *path)
 	ctx->connection_lost = ubus_default_connection_lost;
 	ctx->pending_timer.cb = ubus_process_pending_msg;
 
-	ctx->msgbuf.data = calloc(UBUS_MAX_MSGLEN, sizeof(char));
+	ctx->msgbuf.data = calloc(UBUS_MSG_CHUNK_SIZE, sizeof(char));
 	if (!ctx->msgbuf.data)
 		return -1;
+	ctx->msgbuf_data_len = UBUS_MSG_CHUNK_SIZE;
 
 	INIT_LIST_HEAD(&ctx->requests);
 	INIT_LIST_HEAD(&ctx->pending);

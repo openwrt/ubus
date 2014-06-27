@@ -155,6 +155,7 @@ struct ubus_context {
 	void (*connection_lost)(struct ubus_context *ctx);
 
 	struct ubus_msghdr_buf msgbuf;
+	uint32_t msgbuf_data_len;
 };
 
 struct ubus_object_data {

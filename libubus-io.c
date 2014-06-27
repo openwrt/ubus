@@ -233,6 +233,7 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 		struct blob_attr data;
 	} hdrbuf;
 	struct iovec iov = STATIC_IOV(hdrbuf);
+	int len;
 	int r;
 
 	/* receive header + start attribute */
@@ -245,6 +246,15 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	}
 
 	if (!ubus_validate_hdr(&hdrbuf.hdr))
+		return false;
+
+	len = blob_raw_len(&hdrbuf.data);
+	if (len > ctx->msgbuf_data_len) {
+		ctx->msgbuf.data = realloc(ctx->msgbuf.data, len * sizeof(char));
+		if (ctx->msgbuf.data)
+			ctx->msgbuf_data_len = len;
+	}
+	if (!ctx->msgbuf.data)
 		return false;
 
 	memcpy(&ctx->msgbuf.hdr, &hdrbuf.hdr, sizeof(hdrbuf.hdr));

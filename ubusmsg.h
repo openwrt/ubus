@@ -19,7 +19,7 @@
 
 #define __packetdata __attribute__((packed)) __attribute__((__aligned__(4)))
 
-#define UBUS_MAX_MSGLEN	65536
+#define UBUS_MSG_CHUNK_SIZE	65536
 
 #define UBUS_SYSTEM_OBJECT_EVENT	1
 #define UBUS_SYSTEM_OBJECT_MAX		1024
