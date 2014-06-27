@@ -111,7 +111,10 @@ static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 			if (!iov_len)
 				return len;
 		}
+		iov->iov_base += cur_len;
 		iov->iov_len -= cur_len;
+		msghdr.msg_iov = iov;
+		msghdr.msg_iovlen = iov_len;
 	} while (1);
 
 	/* Should never reach here */
