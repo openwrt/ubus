@@ -224,8 +224,12 @@ int ubus_invoke(struct ubus_context *ctx, uint32_t obj, const char *method,
 		int timeout)
 {
 	struct ubus_request req;
+	int rc;
 
-	ubus_invoke_async(ctx, obj, method, msg, &req);
+	rc = ubus_invoke_async(ctx, obj, method, msg, &req);
+	if (rc)
+		return rc;
+
 	req.data_cb = cb;
 	req.priv = priv;
 	return ubus_complete_request(ctx, &req, timeout);
