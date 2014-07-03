@@ -20,7 +20,7 @@ extern const struct ubus_method watch_method;
 static inline struct blob_attr *
 ubus_msghdr_data(struct ubus_msghdr *hdr)
 {
-	struct ubus_msghdr_buf *hdrbuf = container_of(hdr, typeof(*hdrbuf), hdr);
+	struct ubus_msghdr_buf *hdrbuf = container_of(hdr, struct ubus_msghdr_buf, hdr);
 	return hdrbuf->data;
 }
 
