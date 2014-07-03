@@ -39,13 +39,6 @@ struct ubus_msghdr_buf {
 	struct blob_attr *data;
 };
 
-static inline struct blob_attr *
-ubus_msghdr_data(struct ubus_msghdr *hdr)
-{
-	struct ubus_msghdr_buf *hdrbuf = container_of(hdr, typeof(*hdrbuf), hdr);
-	return hdrbuf->data;
-}
-
 typedef void (*ubus_lookup_handler_t)(struct ubus_context *ctx,
 				      struct ubus_object_data *obj,
 				      void *priv);
