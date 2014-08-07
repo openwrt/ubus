@@ -254,15 +254,11 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 		return false;
 
 	len = blob_raw_len(&hdrbuf.data);
-	if (len > ctx->msgbuf_data_len) {
+	if (len > ctx->msgbuf_data_len)
 		ctx->msgbuf_reduction_counter = UBUS_MSGBUF_REDUCTION_INTERVAL;
-	} else if (ctx->msgbuf_data_len > UBUS_MSG_CHUNK_SIZE) {
-		if (ctx->msgbuf_reduction_counter > 0) {
-			len = -1;
-			--ctx->msgbuf_reduction_counter;
-		} else
-			len = UBUS_MSG_CHUNK_SIZE;
-	} else
+	else if (ctx->msgbuf_reduction_counter > 0 && len < UBUS_MSG_CHUNK_SIZE)
+		len = !--ctx->msgbuf_reduction_counter ? UBUS_MSG_CHUNK_SIZE : -1;
+	else
 		len = -1;
 
 	if (len > -1) {
