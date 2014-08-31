@@ -379,7 +379,7 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 		goto out_free;
 
 	ret = UBUS_STATUS_OK;
-	fcntl(ctx->sock.fd, F_SETFL, fcntl(ctx->sock.fd, F_GETFL) | O_NONBLOCK);
+	fcntl(ctx->sock.fd, F_SETFL, fcntl(ctx->sock.fd, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
 
 	ubus_refresh_state(ctx);
 
