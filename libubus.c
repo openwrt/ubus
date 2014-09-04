@@ -243,8 +243,11 @@ int ubus_register_event_handler(struct ubus_context *ctx,
 	if (pattern)
 		blobmsg_add_string(&b2, "pattern", pattern);
 
-	return ubus_invoke(ctx, UBUS_SYSTEM_OBJECT_EVENT, "register", b2.head,
+	ret = ubus_invoke(ctx, UBUS_SYSTEM_OBJECT_EVENT, "register", b2.head,
 			  NULL, NULL, 0);
+	blob_buf_free(&b2);
+
+	return ret;
 }
 
 int ubus_send_event(struct ubus_context *ctx, const char *id,
