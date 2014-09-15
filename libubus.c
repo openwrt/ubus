@@ -74,16 +74,14 @@ static void
 ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr)
 {
 	struct ubus_pending_msg *pending;
+	void *data;
 
-	pending = calloc(1, sizeof(*pending));
-	if (!pending)
-		return;
-	pending->hdr.data = calloc(1, blob_raw_len(ubus_msghdr_data(hdr)));
-	if (!pending->hdr.data)
-		return;
+	pending = calloc_a(sizeof(*pending),
+			   &data, blob_raw_len(ubus_msghdr_data(hdr)));
 
+	pending->hdr.data = data;
 	memcpy(&pending->hdr.hdr, hdr, sizeof(*hdr));
-	memcpy(pending->hdr.data, ubus_msghdr_data(hdr), blob_raw_len(ubus_msghdr_data(hdr)));
+	memcpy(data, ubus_msghdr_data(hdr), blob_raw_len(ubus_msghdr_data(hdr)));
 	list_add(&pending->list, &ctx->pending);
 	if (ctx->sock.registered)
 		uloop_timeout_set(&ctx->pending_timer, 1);
@@ -121,7 +119,6 @@ static void ubus_process_pending_msg(struct uloop_timeout *timeout)
 		pending = list_first_entry(&ctx->pending, struct ubus_pending_msg, list);
 		list_del(&pending->list);
 		ubus_process_msg(ctx, &pending->hdr.hdr, -1);
-		free(pending->hdr.data);
 		free(pending);
 	}
 }
