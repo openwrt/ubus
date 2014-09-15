@@ -17,22 +17,15 @@
 extern struct blob_buf b;
 extern const struct ubus_method watch_method;
 
-static inline struct blob_attr *
-ubus_msghdr_data(struct ubus_msghdr *hdr)
-{
-	struct ubus_msghdr_buf *hdrbuf = container_of(hdr, struct ubus_msghdr_buf, hdr);
-	return hdrbuf->data;
-}
-
 struct blob_attr **ubus_parse_msg(struct blob_attr *msg);
 void ubus_handle_data(struct uloop_fd *u, unsigned int events);
 int ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 		  struct blob_attr *msg, int cmd, uint32_t peer, int fd);
-void ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr, int fd);
+void ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
 int __hidden ubus_start_request(struct ubus_context *ctx, struct ubus_request *req,
 				struct blob_attr *msg, int cmd, uint32_t peer);
-void ubus_process_obj_msg(struct ubus_context*ctx, struct ubus_msghdr *hdr);
-void ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr, int fd);
+void ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf);
+void ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
 void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout);
 
 

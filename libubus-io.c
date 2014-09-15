@@ -283,11 +283,10 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 {
 	struct ubus_context *ctx = container_of(u, struct ubus_context, sock);
-	struct ubus_msghdr *hdr = &ctx->msgbuf.hdr;
 	int recv_fd = -1;
 
 	while (get_next_msg(ctx, &recv_fd)) {
-		ubus_process_msg(ctx, hdr, recv_fd);
+		ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
 		if (uloop_cancelled)
 			break;
 	}

@@ -91,15 +91,16 @@ send:
 	ubus_complete_deferred_request(ctx, &req, ret);
 }
 
-void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr)
+void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf)
 {
 	void (*cb)(struct ubus_context *, struct ubus_msghdr *,
 		   struct ubus_object *, struct blob_attr **);
+	struct ubus_msghdr *hdr = &buf->hdr;
 	struct blob_attr **attrbuf;
 	struct ubus_object *obj;
 	uint32_t objid;
 
-	attrbuf = ubus_parse_msg(ubus_msghdr_data(hdr));
+	attrbuf = ubus_parse_msg(buf->data);
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
 

@@ -71,41 +71,39 @@ out:
 }
 
 static void
-ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr)
+ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf)
 {
 	struct ubus_pending_msg *pending;
 	void *data;
 
-	pending = calloc_a(sizeof(*pending),
-			   &data, blob_raw_len(ubus_msghdr_data(hdr)));
+	pending = calloc_a(sizeof(*pending), &data, blob_raw_len(buf->data));
 
 	pending->hdr.data = data;
-	memcpy(&pending->hdr.hdr, hdr, sizeof(*hdr));
-	memcpy(data, ubus_msghdr_data(hdr), blob_raw_len(ubus_msghdr_data(hdr)));
+	memcpy(&pending->hdr.hdr, &buf->hdr, sizeof(buf->hdr));
+	memcpy(data, buf->data, blob_raw_len(buf->data));
 	list_add(&pending->list, &ctx->pending);
 	if (ctx->sock.registered)
 		uloop_timeout_set(&ctx->pending_timer, 1);
 }
 
 void __hidden
-ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr *hdr, int fd)
+ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd)
 {
-
-	switch(hdr->type) {
+	switch(buf->hdr.type) {
 	case UBUS_MSG_STATUS:
 	case UBUS_MSG_DATA:
-		ubus_process_req_msg(ctx, hdr, fd);
+		ubus_process_req_msg(ctx, buf, fd);
 		break;
 
 	case UBUS_MSG_INVOKE:
 	case UBUS_MSG_UNSUBSCRIBE:
 	case UBUS_MSG_NOTIFY:
 		if (ctx->stack_depth) {
-			ubus_queue_msg(ctx, hdr);
+			ubus_queue_msg(ctx, buf);
 			break;
 		}
 
-		ubus_process_obj_msg(ctx, hdr);
+		ubus_process_obj_msg(ctx, buf);
 		break;
 	}
 }
@@ -118,7 +116,7 @@ static void ubus_process_pending_msg(struct uloop_timeout *timeout)
 	while (!ctx->stack_depth && !list_empty(&ctx->pending)) {
 		pending = list_first_entry(&ctx->pending, struct ubus_pending_msg, list);
 		list_del(&pending->list);
-		ubus_process_msg(ctx, &pending->hdr.hdr, -1);
+		ubus_process_msg(ctx, &pending->hdr, -1);
 		free(pending);
 	}
 }
