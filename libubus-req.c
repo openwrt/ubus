@@ -153,6 +153,7 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 			timeout = time_end - get_time_msec();
 			if (timeout <= 0) {
 				ubus_set_req_status(req, UBUS_STATUS_TIMEOUT);
+				uloop_cancelled = cancelled;
 				break;
 			}
 		}
