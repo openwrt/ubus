@@ -99,6 +99,7 @@ void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_
 	struct blob_attr **attrbuf;
 	struct ubus_object *obj;
 	uint32_t objid;
+	void *prev_data = NULL;
 
 	attrbuf = ubus_parse_msg(buf->data);
 	if (!attrbuf[UBUS_ATTR_OBJID])
@@ -120,7 +121,20 @@ void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_
 	default:
 		return;
 	}
+
+	if (buf == &ctx->msgbuf) {
+		prev_data = buf->data;
+		buf->data = NULL;
+	}
+
 	cb(ctx, hdr, obj, attrbuf);
+
+	if (prev_data) {
+		if (buf->data)
+			free(prev_data);
+		else
+			buf->data = prev_data;
+	}
 }
 
 static void ubus_add_object_cb(struct ubus_request *req, int type, struct blob_attr *msg)
