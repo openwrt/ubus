@@ -506,7 +506,7 @@ void ubus_notify_unsubscribe(struct ubus_subscription *s)
 	ubus_unsubscribe(s);
 }
 
-static void __init ubusd_proto_init(void)
+static void __constructor ubusd_proto_init(void)
 {
 	ubus_init_id_tree(&clients);
 

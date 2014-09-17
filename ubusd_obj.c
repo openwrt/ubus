@@ -219,7 +219,7 @@ void ubusd_free_object(struct ubus_object *obj)
 	free(obj);
 }
 
-static void __init ubusd_obj_init(void)
+static void __constructor ubusd_obj_init(void)
 {
 	ubus_init_id_tree(&objects);
 	ubus_init_id_tree(&obj_types);

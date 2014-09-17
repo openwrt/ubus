@@ -21,6 +21,4 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
 
-#define __init __attribute__((constructor))
-
 #endif
