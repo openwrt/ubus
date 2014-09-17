@@ -66,7 +66,10 @@ static void test_hello_reply(struct uloop_timeout *t)
 	blobmsg_add_string(&b, "message", req->data);
 	ubus_send_reply(ctx, &req->req, b.head);
 
-	pipe(fds);
+	if (pipe(fds) == -1) {
+		fprintf(stderr, "Failed to create pipe\n");
+		return;
+	}
 	ubus_request_set_fd(ctx, &req->req, fds[0]);
 	ubus_complete_deferred_request(ctx, &req->req, 0);
 	req->fd = fds[1];
