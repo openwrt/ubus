@@ -209,9 +209,15 @@ struct ubus_auto_conn {
 };
 
 struct ubus_context *ubus_connect(const char *path);
+int ubus_connect_ctx(struct ubus_context *ctx, const char *path);
 void ubus_auto_connect(struct ubus_auto_conn *conn);
 int ubus_reconnect(struct ubus_context *ctx, const char *path);
+
+/* call this only for struct ubus_context pointers returned by ubus_connect() */
 void ubus_free(struct ubus_context *ctx);
+
+/* call this only for struct ubus_context pointers initialised by ubus_connect_ctx() */
+void ubus_shutdown(struct ubus_context *ctx);
 
 const char *ubus_strerror(int error);
 

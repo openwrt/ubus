@@ -271,8 +271,10 @@ static void ubus_default_connection_lost(struct ubus_context *ctx)
 		uloop_end();
 }
 
-static int _ubus_connect(struct ubus_context *ctx, const char *path)
+int ubus_connect_ctx(struct ubus_context *ctx, const char *path)
 {
+	memset(ctx, 0, sizeof(*ctx));
+
 	ctx->sock.fd = -1;
 	ctx->sock.cb = ubus_handle_data;
 	ctx->connection_lost = ubus_default_connection_lost;
@@ -316,7 +318,7 @@ static void ubus_auto_connect_cb(struct uloop_timeout *timeout)
 {
 	struct ubus_auto_conn *conn = container_of(timeout, struct ubus_auto_conn, timer);
 
-	if (_ubus_connect(&conn->ctx, conn->path)) {
+	if (ubus_connect_ctx(&conn->ctx, conn->path)) {
 		uloop_timeout_set(timeout, 1000);
 		fprintf(stderr, "failed to connect to ubus\n");
 		return;
@@ -341,7 +343,7 @@ struct ubus_context *ubus_connect(const char *path)
 	if (!ctx)
 		return NULL;
 
-	if (_ubus_connect(ctx, path)) {
+	if (ubus_connect_ctx(ctx, path)) {
 		free(ctx);
 		ctx = NULL;
 	}
@@ -349,10 +351,15 @@ struct ubus_context *ubus_connect(const char *path)
 	return ctx;
 }
 
-void ubus_free(struct ubus_context *ctx)
+void ubus_shutdown(struct ubus_context *ctx)
 {
 	blob_buf_free(&b);
 	close(ctx->sock.fd);
 	free(ctx->msgbuf.data);
+}
+
+void ubus_free(struct ubus_context *ctx)
+{
+	ubus_shutdown(ctx);
 	free(ctx);
 }
