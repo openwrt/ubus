@@ -175,7 +175,7 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 	if (!registered) {
 		uloop_fd_delete(&ctx->sock);
 
-		if (ctx->stack_depth)
+		if (!ctx->stack_depth)
 			ctx->pending_timer.cb(&ctx->pending_timer);
 	}
 
