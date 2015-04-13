@@ -93,6 +93,9 @@ static int test_hello(struct ubus_context *ctx, struct ubus_object *obj,
 		msgstr = blobmsg_data(tb[HELLO_MSG]);
 
 	hreq = calloc(1, sizeof(*hreq) + strlen(format) + strlen(obj->name) + strlen(msgstr) + 1);
+	if (!hreq)
+		return UBUS_STATUS_UNKNOWN_ERROR;
+
 	sprintf(hreq->data, format, obj->name, msgstr);
 	ubus_defer_request(ctx, req, &hreq->req);
 	hreq->timeout.cb = test_hello_reply;

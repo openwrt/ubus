@@ -58,6 +58,9 @@ static struct ubus_object_type *ubus_create_obj_type(struct blob_attr *sig)
 	int rem;
 
 	type = calloc(1, sizeof(*type));
+	if (!type)
+		return NULL;
+
 	type->refcount = 1;
 
 	if (!ubus_alloc_id(&obj_types, &type->id, 0))

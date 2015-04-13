@@ -382,6 +382,9 @@ static int ubus_lua_load_methods(lua_State *L, struct ubus_method *m)
 
 	/* setup the policy pointers */
 	p = malloc(sizeof(struct blobmsg_policy) * plen);
+	if (!p)
+		return 1;
+
 	memset(p, 0, sizeof(struct blobmsg_policy) * plen);
 	m->policy = p;
 	lua_pushnil(L);
@@ -417,6 +420,9 @@ static struct ubus_object* ubus_lua_load_object(lua_State *L)
 
 	/* setup object pointers */
 	obj = malloc(sizeof(struct ubus_lua_object));
+	if (!obj)
+		return NULL;
+
 	memset(obj, 0, sizeof(struct ubus_lua_object));
 	obj->o.name = lua_tostring(L, -2);
 
@@ -427,6 +433,11 @@ static struct ubus_object* ubus_lua_load_object(lua_State *L)
 
 	/* setup type pointers */
 	obj->o.type = malloc(sizeof(struct ubus_object_type));
+	if (!obj->o.type) {
+		free(obj);
+		return NULL;
+	}
+
 	memset(obj->o.type, 0, sizeof(struct ubus_object_type));
 	obj->o.type->name = lua_tostring(L, -2);
 	obj->o.type->id = 0;
@@ -529,10 +540,11 @@ ubus_lua_call_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
 	lua_State *L = (lua_State *)req->priv;
 
-	if (!msg)
+	if (!msg && L)
 		lua_pushnil(L);
 
-	ubus_lua_parse_blob_array(L, blob_data(msg), blob_len(msg), true);
+	if (msg && L)
+		ubus_lua_parse_blob_array(L, blob_data(msg), blob_len(msg), true);
 }
 
 static int
@@ -598,6 +610,9 @@ ubus_lua_load_event(lua_State *L)
 	struct ubus_lua_event* event = NULL;
 
 	event = malloc(sizeof(struct ubus_lua_event));
+	if (!event)
+		return NULL;
+
 	memset(event, 0, sizeof(struct ubus_lua_event));
 	event->e.cb = ubus_event_handler;
 

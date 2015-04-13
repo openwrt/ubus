@@ -487,6 +487,9 @@ void ubus_notify_subscription(struct ubus_object *obj)
 	blob_put_int8(&b, UBUS_ATTR_ACTIVE, active);
 
 	ub = ubus_msg_from_blob(false);
+	if (!ub)
+		return;
+
 	ubus_msg_init(ub, UBUS_MSG_NOTIFY, ++obj->invoke_seq, 0);
 	ubus_msg_send(obj->client, ub, true);
 }
@@ -500,8 +503,10 @@ void ubus_notify_unsubscribe(struct ubus_subscription *s)
 	blob_put_int32(&b, UBUS_ATTR_TARGET, s->target->id.id);
 
 	ub = ubus_msg_from_blob(false);
-	ubus_msg_init(ub, UBUS_MSG_UNSUBSCRIBE, ++s->subscriber->invoke_seq, 0);
-	ubus_msg_send(s->subscriber->client, ub, true);
+	if (ub != NULL) {
+		ubus_msg_init(ub, UBUS_MSG_UNSUBSCRIBE, ++s->subscriber->invoke_seq, 0);
+		ubus_msg_send(s->subscriber->client, ub, true);
+	}
 
 	ubus_unsubscribe(s);
 }

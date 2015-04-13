@@ -267,6 +267,7 @@ void ubusd_event_init(void)
 {
 	ubus_init_string_tree(&patterns, true);
 	event_obj = ubusd_create_object_internal(NULL, UBUS_SYSTEM_OBJECT_EVENT);
-	event_obj->recv_msg = ubusd_event_recv;
+	if (event_obj != NULL)
+		event_obj->recv_msg = ubusd_event_recv;
 }
 

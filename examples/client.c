@@ -106,8 +106,10 @@ static void test_count(struct uloop_timeout *timeout)
 	count_to += count_progression;
 
 	s = count_to_number(count_to);
-	if (!s)
+	if (!s) {
 		fprintf(stderr, "Could not allocate memory to count up to '%u'\n", count_to);
+		return;
+	}
 
 	fprintf(stderr, "Sending count up to '%u'; string has length '%u'\n",
 	        count_to, (uint32_t)strlen(s));
