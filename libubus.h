@@ -66,32 +66,44 @@ typedef void (*ubus_connect_handler_t)(struct ubus_context *ctx);
 		.methods = _methods			\
 	}
 
-#define __UBUS_METHOD_NOARG(_name, _handler)		\
+#define __UBUS_METHOD_NOARG(_name, _handler, _tags)	\
 	.name = _name,					\
-	.handler = _handler
+	.handler = _handler,				\
+	.tags = _tags
 
-#define __UBUS_METHOD(_name, _handler, _policy)		\
-	__UBUS_METHOD_NOARG(_name, _handler),		\
+#define __UBUS_METHOD(_name, _handler, _policy, _tags)	\
+	__UBUS_METHOD_NOARG(_name, _handler, _tags),	\
 	.policy = _policy,				\
 	.n_policy = ARRAY_SIZE(_policy)
 
 #define UBUS_METHOD(_name, _handler, _policy)		\
-	{ __UBUS_METHOD(_name, _handler, _policy) }
+	{ __UBUS_METHOD(_name, _handler, _policy, 0) }
+
+#define UBUS_METHOD_TAG(_name, _handler, _policy, _tags)\
+	{ __UBUS_METHOD(_name, _handler, _policy, _tags) }
 
 #define UBUS_METHOD_MASK(_name, _handler, _policy, _mask) \
 	{						\
-		__UBUS_METHOD(_name, _handler, _policy),\
+		__UBUS_METHOD(_name, _handler, _policy, 0),\
 		.mask = _mask				\
 	}
 
 #define UBUS_METHOD_NOARG(_name, _handler)		\
-	{ __UBUS_METHOD_NOARG(_name, _handler) }
+	{ __UBUS_METHOD_NOARG(_name, _handler, 0) }
+
+#define UBUS_METHOD_TAG_NOARG(_name, _handler, _tags)	\
+	{ __UBUS_METHOD_NOARG(_name, _handler, _tags) }
+
+#define UBUS_TAG_STATUS		BIT(0)
+#define UBUS_TAG_ADMIN		BIT(1)
+#define UBUS_TAG_PRIVATE	BIT(2)
 
 struct ubus_method {
 	const char *name;
 	ubus_handler_t handler;
 
 	unsigned long mask;
+	unsigned long tags;
 	const struct blobmsg_policy *policy;
 	int n_policy;
 };
