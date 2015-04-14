@@ -158,8 +158,7 @@ static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, stru
 
 	blob_buf_init(&b, 0);
 
-	if (obj->path.key)
-		blob_put_string(&b, UBUS_ATTR_OBJPATH, obj->path.key);
+	blob_put_string(&b, UBUS_ATTR_OBJPATH, obj->path.key);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id.id);
 	blob_put_int32(&b, UBUS_ATTR_OBJTYPE, obj->type->id.id);
 
