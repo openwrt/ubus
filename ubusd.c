@@ -17,6 +17,7 @@
 #ifdef FreeBSD
 #include <sys/param.h>
 #endif
+#include <syslog.h>
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -363,6 +364,7 @@ int main(int argc, char **argv)
 
 	signal(SIGPIPE, SIG_IGN);
 
+	openlog("ubusd", LOG_PID, LOG_DAEMON);
 	uloop_init();
 
 	while ((ch = getopt(argc, argv, "s:")) != -1) {
