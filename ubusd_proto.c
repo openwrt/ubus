@@ -34,7 +34,7 @@ static const struct blob_attr_info ubus_policy[UBUS_ATTR_MAX] = {
 	[UBUS_ATTR_METHOD] = { .type = BLOB_ATTR_STRING },
 };
 
-static struct blob_attr **ubus_parse_msg(struct blob_attr *msg)
+struct blob_attr **ubus_parse_msg(struct blob_attr *msg)
 {
 	blob_parse(msg, attrbuf, ubus_policy, UBUS_ATTR_MAX);
 	return attrbuf;
