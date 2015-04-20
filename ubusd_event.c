@@ -103,8 +103,6 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 	return 0;
 }
 
-typedef struct ubus_msg_buf *(*event_fill_cb)(void *priv, const char *id);
-
 static void ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *cl,
 				 struct ubus_object *obj, const char *id,
 				 event_fill_cb fill_cb, void *cb_priv)
@@ -143,8 +141,8 @@ static bool strmatch_len(const char *s1, const char *s2, int *len)
 	return false;
 }
 
-static int ubusd_send_event(struct ubus_client *cl, const char *id,
-			    event_fill_cb fill_cb, void *cb_priv)
+int ubusd_send_event(struct ubus_client *cl, const char *id,
+		     event_fill_cb fill_cb, void *cb_priv)
 {
 	struct ubus_msg_buf *ub = NULL;
 	struct event_source *ev;

@@ -66,9 +66,12 @@ struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb);
 void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub);
 void ubusd_proto_free_client(struct ubus_client *cl);
 
+typedef struct ubus_msg_buf *(*event_fill_cb)(void *priv, const char *id);
 void ubusd_event_init(void);
 void ubusd_event_cleanup_object(struct ubus_object *obj);
 void ubusd_send_obj_event(struct ubus_object *obj, bool add);
+int ubusd_send_event(struct ubus_client *cl, const char *id,
+		     event_fill_cb fill_cb, void *cb_priv);
 
 
 #endif
