@@ -244,7 +244,7 @@ static int ubusd_handle_invoke(struct ubus_client *cl, struct ubus_msg_buf *ub, 
 	method = blob_data(attr[UBUS_ATTR_METHOD]);
 
 	if (!obj->client)
-		return obj->recv_msg(cl, method, attr[UBUS_ATTR_DATA]);
+		return obj->recv_msg(cl, ub, method, attr[UBUS_ATTR_DATA]);
 
 	ub->hdr.peer = cl->id.id;
 	blob_buf_init(&b, 0);

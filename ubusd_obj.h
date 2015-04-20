@@ -52,7 +52,8 @@ struct ubus_object {
 	struct avl_node path;
 
 	struct ubus_client *client;
-	int (*recv_msg)(struct ubus_client *client, const char *method, struct blob_attr *msg);
+	int (*recv_msg)(struct ubus_client *client, struct ubus_msg_buf *ub,
+			const char *method, struct blob_attr *msg);
 
 	int event_seen;
 	unsigned int invoke_seq;

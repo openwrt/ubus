@@ -228,7 +228,7 @@ static int ubusd_forward_event(struct ubus_client *cl, struct blob_attr *msg)
 	return ubusd_send_event(cl, id, ubusd_create_event_from_msg, data);
 }
 
-static int ubusd_event_recv(struct ubus_client *cl, const char *method, struct blob_attr *msg)
+static int ubusd_event_recv(struct ubus_client *cl, struct ubus_msg_buf *ub, const char *method, struct blob_attr *msg)
 {
 	if (!strcmp(method, "register"))
 		return ubusd_alloc_event_pattern(cl, msg);
