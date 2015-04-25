@@ -69,7 +69,11 @@ ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	req.peer = hdr->peer;
 	req.seq = hdr->seq;
 	req.object = obj->id;
-
+	if (attrbuf[UBUS_ATTR_USER] && attrbuf[UBUS_ATTR_GROUP]) {
+		req.acl.user = blobmsg_get_string(attrbuf[UBUS_ATTR_USER]);
+		req.acl.group = blobmsg_get_string(attrbuf[UBUS_ATTR_GROUP]);
+		req.acl.object = obj->name;
+	}
 	for (method = 0; method < obj->n_methods; method++)
 		if (!obj->methods[method].name ||
 		    !strcmp(obj->methods[method].name,
