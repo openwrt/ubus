@@ -74,8 +74,8 @@ static struct ubus_msg_buf *ubus_reply_from_blob(struct ubus_msg_buf *ub, bool s
 	return new;
 }
 
-static void
-ubus_send_msg_from_blob(struct ubus_client *cl, struct ubus_msg_buf *ub,
+void
+ubus_proto_send_msg_from_blob(struct ubus_client *cl, struct ubus_msg_buf *ub,
 			uint8_t type)
 {
 	ub = ubus_reply_from_blob(ub, true);
@@ -129,7 +129,7 @@ static int ubusd_handle_remove_object(struct ubus_client *cl, struct ubus_msg_bu
 		blob_put_int32(&b, UBUS_ATTR_OBJTYPE, obj->type->id.id);
 
 	ubusd_free_object(obj);
-	ubus_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
+	ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
 
 	return 0;
 }
@@ -147,7 +147,7 @@ static int ubusd_handle_add_object(struct ubus_client *cl, struct ubus_msg_buf *
 	if (attr[UBUS_ATTR_SIGNATURE])
 		blob_put_int32(&b, UBUS_ATTR_OBJTYPE, obj->type->id.id);
 
-	ubus_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
+	ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
 	return 0;
 }
 
@@ -223,7 +223,7 @@ ubusd_forward_invoke(struct ubus_object *obj, const char *method,
 	if (data)
 		blob_put(&b, UBUS_ATTR_DATA, blob_data(data), blob_len(data));
 
-	ubus_send_msg_from_blob(obj->client, ub, UBUS_MSG_INVOKE);
+	ubus_proto_send_msg_from_blob(obj->client, ub, UBUS_MSG_INVOKE);
 }
 
 static int ubusd_handle_invoke(struct ubus_client *cl, struct ubus_msg_buf *ub, struct blob_attr **attr)
@@ -286,7 +286,7 @@ static int ubusd_handle_notify(struct ubus_client *cl, struct ubus_msg_buf *ub, 
 		}
 		blob_nest_end(&b, c);
 		blob_put_int32(&b, UBUS_ATTR_STATUS, 0);
-		ubus_send_msg_from_blob(cl, ub, UBUS_MSG_STATUS);
+		ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_STATUS);
 	}
 
 	ub->hdr.peer = cl->id.id;

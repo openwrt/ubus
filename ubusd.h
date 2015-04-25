@@ -66,6 +66,8 @@ struct blob_attr **ubus_parse_msg(struct blob_attr *msg);
 struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb);
 void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub);
 void ubusd_proto_free_client(struct ubus_client *cl);
+void ubus_proto_send_msg_from_blob(struct ubus_client *cl, struct ubus_msg_buf *ub,
+				   uint8_t type);
 
 typedef struct ubus_msg_buf *(*event_fill_cb)(void *priv, const char *id);
 void ubusd_event_init(void);
