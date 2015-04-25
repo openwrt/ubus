@@ -32,6 +32,8 @@ static const struct blob_attr_info ubus_policy[UBUS_ATTR_MAX] = {
 	[UBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
 	[UBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
 	[UBUS_ATTR_METHOD] = { .type = BLOB_ATTR_STRING },
+	[UBUS_ATTR_USER] = { .type = BLOB_ATTR_STRING },
+	[UBUS_ATTR_GROUP] = { .type = BLOB_ATTR_STRING },
 };
 
 struct blob_attr **ubus_parse_msg(struct blob_attr *msg)
@@ -154,6 +156,7 @@ static int ubusd_handle_add_object(struct ubus_client *cl, struct ubus_msg_buf *
 static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, struct ubus_object *obj)
 {
 	struct ubus_method *m;
+	int cnt = 0;
 	void *s;
 
 	blob_buf_init(&b, 0);
@@ -163,11 +166,16 @@ static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, stru
 	blob_put_int32(&b, UBUS_ATTR_OBJTYPE, obj->type->id.id);
 
 	s = blob_nest_start(&b, UBUS_ATTR_SIGNATURE);
-	list_for_each_entry(m, &obj->type->methods, list)
-		blobmsg_add_blob(&b, m->data);
+	list_for_each_entry(m, &obj->type->methods, list) {
+		if (!ubusd_acl_check(cl, obj->path.key, blobmsg_name(m->data), UBUS_ACL_ACCESS)) {
+			blobmsg_add_blob(&b, m->data);
+			cnt++;
+		}
+	}
 	blob_nest_end(&b, s);
 
-	ubus_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
+	if (cnt)
+		ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
 }
 
 static int ubusd_handle_lookup(struct ubus_client *cl, struct ubus_msg_buf *ub, struct blob_attr **attr)
@@ -215,11 +223,16 @@ static int ubusd_handle_lookup(struct ubus_client *cl, struct ubus_msg_buf *ub, 
 }
 
 static void
-ubusd_forward_invoke(struct ubus_object *obj, const char *method,
-		     struct ubus_msg_buf *ub, struct blob_attr *data)
+ubusd_forward_invoke(struct ubus_client *cl, struct ubus_object *obj,
+		     const char *method, struct ubus_msg_buf *ub,
+		     struct blob_attr *data)
 {
 	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id.id);
 	blob_put_string(&b, UBUS_ATTR_METHOD, method);
+	if (cl->user)
+		blob_put_string(&b, UBUS_ATTR_USER, cl->user);
+	if (cl->group)
+		blob_put_string(&b, UBUS_ATTR_GROUP, cl->group);
 	if (data)
 		blob_put(&b, UBUS_ATTR_DATA, blob_data(data), blob_len(data));
 
@@ -243,12 +256,16 @@ static int ubusd_handle_invoke(struct ubus_client *cl, struct ubus_msg_buf *ub, 
 
 	method = blob_data(attr[UBUS_ATTR_METHOD]);
 
+	if (ubusd_acl_check(cl, obj->path.key, method, UBUS_ACL_ACCESS))
+		return UBUS_STATUS_NOT_FOUND;
+
 	if (!obj->client)
 		return obj->recv_msg(cl, ub, method, attr[UBUS_ATTR_DATA]);
 
 	ub->hdr.peer = cl->id.id;
 	blob_buf_init(&b, 0);
-	ubusd_forward_invoke(obj, method, ub, attr[UBUS_ATTR_DATA]);
+
+	ubusd_forward_invoke(cl, obj, method, ub, attr[UBUS_ATTR_DATA]);
 	ubus_msg_free(ub);
 
 	return -1;
@@ -295,7 +312,7 @@ static int ubusd_handle_notify(struct ubus_client *cl, struct ubus_msg_buf *ub, 
 		blob_buf_init(&b, 0);
 		if (no_reply)
 			blob_put_int8(&b, UBUS_ATTR_NO_REPLY, 1);
-		ubusd_forward_invoke(s->subscriber, method, ub, attr[UBUS_ATTR_DATA]);
+		ubusd_forward_invoke(cl, s->subscriber, method, ub, attr[UBUS_ATTR_DATA]);
 	}
 	ubus_msg_free(ub);
 
@@ -362,6 +379,13 @@ static int ubusd_handle_add_watch(struct ubus_client *cl, struct ubus_msg_buf *u
 
 	if (cl == target->client)
 		return UBUS_STATUS_INVALID_ARGUMENT;
+
+	if (!target->path.key) {
+		if (strcmp(target->client->user, cl->user) && strcmp(target->client->group, cl->group))
+			return UBUS_STATUS_NOT_FOUND;
+	} else if (ubusd_acl_check(cl, target->path.key, NULL, UBUS_ACL_SUBSCRIBE)) {
+		return UBUS_STATUS_NOT_FOUND;
+	}
 
 	ubus_subscribe(obj, target);
 	return 0;
@@ -443,6 +467,9 @@ struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
 	cl = calloc(1, sizeof(*cl));
 	if (!cl)
 		return NULL;
+
+	if (ubusd_acl_init_client(cl, fd))
+		goto free;
 
 	INIT_LIST_HEAD(&cl->objects);
 	cl->sock.fd = fd;

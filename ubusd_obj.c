@@ -145,6 +145,9 @@ struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr
 		return NULL;
 
 	if (attr[UBUS_ATTR_OBJPATH]) {
+		if (ubusd_acl_check(cl, blob_data(attr[UBUS_ATTR_OBJPATH]), NULL, UBUS_ACL_PUBLISH))
+			goto free;
+
 		obj->path.key = strdup(blob_data(attr[UBUS_ATTR_OBJPATH]));
 		if (!obj->path.key)
 			goto free;
@@ -228,4 +231,5 @@ static void __constructor ubusd_obj_init(void)
 	ubus_init_id_tree(&obj_types);
 	ubus_init_string_tree(&path, false);
 	ubusd_event_init();
+	ubusd_acl_init();
 }
