@@ -171,10 +171,18 @@ struct ubus_object_data {
 	struct blob_attr *signature;
 };
 
+struct ubus_acl_key {
+	const char *user;
+	const char *group;
+	const char *object;
+};
+
 struct ubus_request_data {
 	uint32_t object;
 	uint32_t peer;
 	uint16_t seq;
+
+	struct ubus_acl_key acl;
 
 	/* internal use */
 	bool deferred;
@@ -281,6 +289,22 @@ ubus_unregister_subscriber(struct ubus_context *ctx, struct ubus_subscriber *obj
 
 int ubus_subscribe(struct ubus_context *ctx, struct ubus_subscriber *obj, uint32_t id);
 int ubus_unsubscribe(struct ubus_context *ctx, struct ubus_subscriber *obj, uint32_t id);
+
+
+/* ----------- acl ----------- */
+
+struct acl_object {
+	struct ubus_acl_key key;
+	struct avl_node avl;
+	struct blob_attr *acl;
+};
+
+extern struct avl_tree acl_objects;
+int ubus_register_acl(struct ubus_context *ctx);
+
+#define acl_for_each(o, m) \
+	if ((m)->object && (m)->user && (m)->group) \
+		avl_for_element_range(avl_find_ge_element(&acl_objects, m, o, avl), avl_find_le_element(&acl_objects, m, o, avl), o, avl)
 
 /* ----------- rpc ----------- */
 

@@ -21,6 +21,7 @@
 #include "ubusd_id.h"
 #include "ubusd_obj.h"
 #include "ubusmsg.h"
+#include "ubusd_acl.h"
 
 #define UBUSD_CLIENT_BACKLOG	32
 #define UBUS_OBJ_HASH_BITS	4
@@ -38,6 +39,11 @@ struct ubus_msg_buf {
 struct ubus_client {
 	struct ubus_id id;
 	struct uloop_fd sock;
+
+	uid_t uid;
+	gid_t gid;
+	char *user;
+	char *group;
 
 	struct list_head objects;
 
@@ -76,5 +82,6 @@ void ubusd_send_obj_event(struct ubus_object *obj, bool add);
 int ubusd_send_event(struct ubus_client *cl, const char *id,
 		     event_fill_cb fill_cb, void *cb_priv);
 
+void ubusd_acl_init(void);
 
 #endif

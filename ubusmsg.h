@@ -22,6 +22,7 @@
 #define UBUS_MSG_CHUNK_SIZE	65536
 
 #define UBUS_SYSTEM_OBJECT_EVENT	1
+#define UBUS_SYSTEM_OBJECT_ACL		2
 #define UBUS_SYSTEM_OBJECT_MAX		1024
 
 struct ubus_msghdr {
@@ -91,6 +92,9 @@ enum ubus_msg_attr {
 	UBUS_ATTR_NO_REPLY,
 
 	UBUS_ATTR_SUBSCRIBERS,
+
+	UBUS_ATTR_USER,
+	UBUS_ATTR_GROUP,
 
 	/* must be last */
 	UBUS_ATTR_MAX,
