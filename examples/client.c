@@ -118,6 +118,7 @@ static void test_count(struct uloop_timeout *timeout)
 	blobmsg_add_string(&b, "string", s);
 
 	if (ubus_lookup_id(ctx, "test", &id)) {
+		free(s);
 		fprintf(stderr, "Failed to look up test object\n");
 		return;
 	}
