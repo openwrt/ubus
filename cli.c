@@ -86,6 +86,7 @@ static void receive_event(struct ubus_context *ctx, struct ubus_event_handler *e
 
 	str = blobmsg_format_json(msg, true);
 	printf("{ \"%s\": %s }\n", type, str);
+	fflush(stdout);
 	free(str);
 }
 
