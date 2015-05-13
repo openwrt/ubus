@@ -681,6 +681,7 @@ ubus_lua__gc(lua_State *L)
 {
 	struct ubus_lua_connection *c = luaL_checkudata(L, 1, METANAME);
 
+	blob_buf_free(&c->buf);
 	if (c->ctx != NULL)
 	{
 		ubus_free(c->ctx);
