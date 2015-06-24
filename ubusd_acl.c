@@ -28,6 +28,14 @@
 
 #include "ubusd.h"
 
+#ifndef SO_PEERCRED
+struct ucred {
+	int pid;
+	int uid;
+	int gid;
+};
+#endif
+
 struct ubusd_acl_obj {
 	struct avl_node avl;
 	struct list_head list;
@@ -135,13 +143,18 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 int
 ubusd_acl_init_client(struct ubus_client *cl, int fd)
 {
-	unsigned int len = sizeof(struct ucred);
 	struct ucred cred;
 	struct passwd *pwd;
 	struct group *group;
 
+#ifdef SO_PEERCRED
+	unsigned int len = sizeof(struct ucred);
+
 	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) == -1)
 		return -1;
+#else
+	memset(&cred, 0, sizeof(cred));
+#endif
 
 	pwd = getpwuid(cred.uid);
 	if (!pwd)
