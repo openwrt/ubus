@@ -242,7 +242,7 @@ retry:
 
 		fd_buf.fd = -1;
 
-		iov.iov_base = &cl->hdrbuf + offset;
+		iov.iov_base = ((char *) &cl->hdrbuf) + offset;
 		iov.iov_len = sizeof(cl->hdrbuf) - offset;
 
 		if (cl->pending_msg_fd < 0) {
