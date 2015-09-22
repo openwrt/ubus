@@ -206,7 +206,7 @@ ubusd_acl_alloc_obj(struct ubusd_acl_file *file, const char *obj)
 	struct ubusd_acl_obj *o;
 	char *k;
 
-	o = calloc_a(1, sizeof(*o), &k, strlen(obj) + 1);
+	o = calloc_a(sizeof(*o), &k, strlen(obj) + 1);
 	o->user = file->user;
 	o->group = file->group;
 	o->avl.key = k;
