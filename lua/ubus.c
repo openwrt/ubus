@@ -597,10 +597,13 @@ ubus_event_handler(struct ubus_context *ctx, struct ubus_event_handler *ev,
 
 	lua_getglobal(state, "__ubus_cb_event");
 	lua_rawgeti(state, -1, listener->r);
+	lua_remove(state, -2);
 
 	if (lua_isfunction(state, -1)) {
 		ubus_lua_parse_blob_array(state, blob_data(msg), blob_len(msg), true);
 		lua_call(state, 1, 0);
+	} else {
+		lua_pop(state, 1);
 	}
 }
 
