@@ -81,7 +81,7 @@ ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf)
 	pending->hdr.data = data;
 	memcpy(&pending->hdr.hdr, &buf->hdr, sizeof(buf->hdr));
 	memcpy(data, buf->data, blob_raw_len(buf->data));
-	list_add(&pending->list, &ctx->pending);
+	list_add_tail(&pending->list, &ctx->pending);
 	if (ctx->sock.registered)
 		uloop_timeout_set(&ctx->pending_timer, 1);
 }
