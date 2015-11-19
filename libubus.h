@@ -158,6 +158,7 @@ struct ubus_context {
 	int stack_depth;
 
 	void (*connection_lost)(struct ubus_context *ctx);
+	void (*monitor_cb)(struct ubus_context *ctx, uint32_t seq, struct blob_attr *data);
 
 	struct ubus_msghdr_buf msgbuf;
 	uint32_t msgbuf_data_len;
@@ -289,6 +290,18 @@ ubus_unregister_subscriber(struct ubus_context *ctx, struct ubus_subscriber *obj
 
 int ubus_subscribe(struct ubus_context *ctx, struct ubus_subscriber *obj, uint32_t id);
 int ubus_unsubscribe(struct ubus_context *ctx, struct ubus_subscriber *obj, uint32_t id);
+
+int __ubus_monitor(struct ubus_context *ctx, const char *type);
+
+static inline int ubus_monitor_start(struct ubus_context *ctx)
+{
+	return __ubus_monitor(ctx, "add");
+}
+
+static inline int ubus_monitor_stop(struct ubus_context *ctx)
+{
+	return __ubus_monitor(ctx, "remove");
+}
 
 
 /* ----------- acl ----------- */

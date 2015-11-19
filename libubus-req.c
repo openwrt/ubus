@@ -466,3 +466,9 @@ void __hidden ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_
 		break;
 	}
 }
+
+int __ubus_monitor(struct ubus_context *ctx, const char *type)
+{
+	blob_buf_init(&b, 0);
+	return ubus_invoke(ctx, UBUS_SYSTEM_OBJECT_MONITOR, type, b.head, NULL, NULL, 1000);
+}
