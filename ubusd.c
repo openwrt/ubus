@@ -136,6 +136,9 @@ void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub, bool free)
 {
 	int written;
 
+	if (ub->hdr.type != UBUS_MSG_MONITOR)
+		ubusd_monitor_message(cl, ub, true);
+
 	if (!cl->tx_queue[cl->txq_cur]) {
 		written = ubus_msg_writev(cl->sock.fd, ub, 0);
 		if (written >= ub->len + sizeof(ub->hdr))
@@ -179,6 +182,7 @@ static void handle_client_disconnect(struct ubus_client *cl)
 	while (ubus_msg_head(cl))
 		ubus_msg_dequeue(cl);
 
+	ubusd_monitor_disconnect(cl);
 	ubusd_proto_free_client(cl);
 	if (cl->pending_msg_fd >= 0)
 		close(cl->pending_msg_fd);
@@ -297,6 +301,7 @@ retry:
 		cl->pending_msg_fd = -1;
 		cl->pending_msg_offset = 0;
 		cl->pending_msg = NULL;
+		ubusd_monitor_message(cl, ub, false);
 		ubusd_proto_receive_message(cl, ub);
 		goto retry;
 	}

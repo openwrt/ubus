@@ -22,7 +22,7 @@ ENDIF()
 ADD_LIBRARY(ubus SHARED libubus.c libubus-io.c libubus-obj.c libubus-sub.c libubus-req.c libubus-acl.c)
 TARGET_LINK_LIBRARIES(ubus ubox)
 
-ADD_EXECUTABLE(ubusd ubusd.c ubusd_id.c ubusd_obj.c ubusd_proto.c ubusd_event.c ubusd_acl.c)
+ADD_EXECUTABLE(ubusd ubusd.c ubusd_id.c ubusd_obj.c ubusd_proto.c ubusd_event.c ubusd_acl.c ubusd_monitor.c)
 TARGET_LINK_LIBRARIES(ubusd ubox blobmsg_json ${json})
 
 find_library(json NAMES json-c json)

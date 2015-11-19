@@ -23,6 +23,7 @@
 
 #define UBUS_SYSTEM_OBJECT_EVENT	1
 #define UBUS_SYSTEM_OBJECT_ACL		2
+#define UBUS_SYSTEM_OBJECT_MONITOR	3
 #define UBUS_SYSTEM_OBJECT_MAX		1024
 
 struct ubus_msghdr {
@@ -69,6 +70,8 @@ enum ubus_msg_type {
 	 */
 	UBUS_MSG_NOTIFY,
 
+	UBUS_MSG_MONITOR,
+
 	/* must be last */
 	__UBUS_MSG_LAST,
 };
@@ -98,6 +101,18 @@ enum ubus_msg_attr {
 
 	/* must be last */
 	UBUS_ATTR_MAX,
+};
+
+enum ubus_monitor_attr {
+	UBUS_MONITOR_CLIENT,
+	UBUS_MONITOR_PEER,
+	UBUS_MONITOR_SEND,
+	UBUS_MONITOR_SEQ,
+	UBUS_MONITOR_TYPE,
+	UBUS_MONITOR_DATA,
+
+	/* must be last */
+	UBUS_MONITOR_MAX,
 };
 
 enum ubus_msg_status {

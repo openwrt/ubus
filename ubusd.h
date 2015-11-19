@@ -84,4 +84,8 @@ int ubusd_send_event(struct ubus_client *cl, const char *id,
 
 void ubusd_acl_init(void);
 
+void ubusd_monitor_init(void);
+void ubusd_monitor_message(struct ubus_client *cl, struct ubus_msg_buf *ub, bool send);
+void ubusd_monitor_disconnect(struct ubus_client *cl);
+
 #endif

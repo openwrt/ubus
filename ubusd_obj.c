@@ -232,4 +232,5 @@ static void __constructor ubusd_obj_init(void)
 	ubus_init_string_tree(&path, false);
 	ubusd_event_init();
 	ubusd_acl_init();
+	ubusd_monitor_init();
 }
