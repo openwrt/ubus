@@ -20,6 +20,21 @@ static struct blob_buf b;
 static int timeout = 30;
 static bool simple_output = false;
 static int verbose = 0;
+static int monitor_dir = -1;
+static uint32_t monitor_mask;
+static const char * const monitor_types[] = {
+	[UBUS_MSG_HELLO] = "hello",
+	[UBUS_MSG_STATUS] = "status",
+	[UBUS_MSG_DATA] = "data",
+	[UBUS_MSG_PING] = "ping",
+	[UBUS_MSG_LOOKUP] = "lookup",
+	[UBUS_MSG_INVOKE] = "invoke",
+	[UBUS_MSG_ADD_OBJECT] = "add_object",
+	[UBUS_MSG_REMOVE_OBJECT] = "remove_object",
+	[UBUS_MSG_SUBSCRIBE] = "subscribe",
+	[UBUS_MSG_UNSUBSCRIBE] = "unsubscribe",
+	[UBUS_MSG_NOTIFY] = "notify",
+};
 
 static const char *format_type(void *priv, struct blob_attr *attr)
 {
@@ -284,6 +299,160 @@ static int ubus_cli_wait_for(struct ubus_context *ctx, int argc, char **argv)
 	return ret;
 }
 
+static const char *
+ubus_cli_msg_type(uint32_t type)
+{
+	const char *ret = NULL;
+	static char unk_type[16];
+
+
+	if (type < ARRAY_SIZE(monitor_types))
+		ret = monitor_types[type];
+
+	if (!ret) {
+		snprintf(unk_type, sizeof(unk_type), "%d", type);
+		ret = unk_type;
+	}
+
+	return ret;
+}
+
+static char *
+ubus_cli_get_monitor_data(struct blob_attr *data)
+{
+	static const struct blob_attr_info policy[UBUS_ATTR_MAX] = {
+		[UBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
+		[UBUS_ATTR_OBJPATH] = { .type = BLOB_ATTR_STRING },
+		[UBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
+		[UBUS_ATTR_METHOD] = { .type = BLOB_ATTR_STRING },
+		[UBUS_ATTR_OBJTYPE] = { .type = BLOB_ATTR_INT32 },
+		[UBUS_ATTR_SIGNATURE] = { .type = BLOB_ATTR_NESTED },
+		[UBUS_ATTR_DATA] = { .type = BLOB_ATTR_NESTED },
+		[UBUS_ATTR_ACTIVE] = { .type = BLOB_ATTR_INT8 },
+		[UBUS_ATTR_NO_REPLY] = { .type = BLOB_ATTR_INT8 },
+		[UBUS_ATTR_USER] = { .type = BLOB_ATTR_STRING },
+		[UBUS_ATTR_GROUP] = { .type = BLOB_ATTR_STRING },
+	};
+	static const char * const names[UBUS_ATTR_MAX] = {
+		[UBUS_ATTR_STATUS] = "status",
+		[UBUS_ATTR_OBJPATH] = "objpath",
+		[UBUS_ATTR_OBJID] = "objid",
+		[UBUS_ATTR_METHOD] = "method",
+		[UBUS_ATTR_OBJTYPE] = "objtype",
+		[UBUS_ATTR_SIGNATURE] = "signature",
+		[UBUS_ATTR_DATA] = "data",
+		[UBUS_ATTR_ACTIVE] = "active",
+		[UBUS_ATTR_NO_REPLY] = "no_reply",
+		[UBUS_ATTR_USER] = "user",
+		[UBUS_ATTR_GROUP] = "group",
+	};
+	struct blob_attr *tb[UBUS_ATTR_MAX];
+	int i;
+
+	blob_buf_init(&b, 0);
+	blob_parse(data, tb, policy, UBUS_ATTR_MAX);
+
+	for (i = 0; i < UBUS_ATTR_MAX; i++) {
+		const char *n = names[i];
+		struct blob_attr *v = tb[i];
+
+		if (!tb[i] || !n)
+			continue;
+
+		switch(policy[i].type) {
+		case BLOB_ATTR_INT32:
+			blobmsg_add_u32(&b, n, blob_get_int32(v));
+			break;
+		case BLOB_ATTR_STRING:
+			blobmsg_add_string(&b, n, blob_data(v));
+			break;
+		case BLOB_ATTR_INT8:
+			blobmsg_add_u8(&b, n, !!blob_get_int8(v));
+			break;
+		case BLOB_ATTR_NESTED:
+			blobmsg_add_field(&b, BLOBMSG_TYPE_TABLE, n, blobmsg_data(v), blobmsg_data_len(v));
+			break;
+		}
+	}
+
+	return blobmsg_format_json(b.head, true);
+}
+
+static void
+ubus_cli_monitor_cb(struct ubus_context *ctx, uint32_t seq, struct blob_attr *msg)
+{
+	static const struct blob_attr_info policy[UBUS_MONITOR_MAX] = {
+		[UBUS_MONITOR_CLIENT] = { .type = BLOB_ATTR_INT32 },
+		[UBUS_MONITOR_PEER] = { .type = BLOB_ATTR_INT32 },
+		[UBUS_MONITOR_SEND] = { .type = BLOB_ATTR_INT8 },
+		[UBUS_MONITOR_TYPE] = { .type = BLOB_ATTR_INT32 },
+		[UBUS_MONITOR_DATA] = { .type = BLOB_ATTR_NESTED },
+	};
+	struct blob_attr *tb[UBUS_MONITOR_MAX];
+	uint32_t client, peer, type;
+	bool send;
+	char *data;
+
+	blob_parse(msg, tb, policy, UBUS_MONITOR_MAX);
+
+	if (!tb[UBUS_MONITOR_CLIENT] ||
+	    !tb[UBUS_MONITOR_PEER] ||
+	    !tb[UBUS_MONITOR_SEND] ||
+	    !tb[UBUS_MONITOR_TYPE] ||
+	    !tb[UBUS_MONITOR_DATA]) {
+		printf("Invalid monitor msg\n");
+		return;
+	}
+
+	send = blob_get_int32(tb[UBUS_MONITOR_SEND]);
+	client = blob_get_int32(tb[UBUS_MONITOR_CLIENT]);
+	peer = blob_get_int32(tb[UBUS_MONITOR_PEER]);
+	type = blob_get_int32(tb[UBUS_MONITOR_TYPE]);
+
+	if (monitor_mask && type < 32 && !(monitor_mask & (1 << type)))
+		return;
+
+	if (monitor_dir >= 0 && send != monitor_dir)
+		return;
+
+	data = ubus_cli_get_monitor_data(tb[UBUS_MONITOR_DATA]);
+	printf("%s %08x #%08x %14s: %s\n", send ? "->" : "<-", client, peer, ubus_cli_msg_type(type), data);
+	free(data);
+	fflush(stdout);
+}
+
+static int ubus_cli_monitor(struct ubus_context *ctx, int argc, char **argv)
+{
+	int ret;
+
+	uloop_init();
+	ubus_add_uloop(ctx);
+	ctx->monitor_cb = ubus_cli_monitor_cb;
+	ret = ubus_monitor_start(ctx);
+	if (ret)
+		return ret;
+
+	uloop_run();
+	uloop_done();
+
+	ubus_monitor_stop(ctx);
+	return 0;
+}
+
+static int add_monitor_type(const char *type)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(monitor_types); i++) {
+		if (!monitor_types[i] || strcmp(monitor_types[i], type) != 0)
+			continue;
+
+		monitor_mask |= 1 << i;
+		return 0;
+	}
+
+	return -1;
+}
 
 static int usage(const char *prog)
 {
@@ -294,6 +463,9 @@ static int usage(const char *prog)
 		" -t <timeout>:		Set the timeout (in seconds) for a command to complete\n"
 		" -S:			Use simplified output (for scripts)\n"
 		" -v:			More verbose output\n"
+		" -m <type>:		(for monitor): include a specific message type\n"
+		"			(can be used more than once)\n"
+		" -M <r|t>		(for monitor): only capture received or transmitted traffic\n"
 		"\n"
 		"Commands:\n"
 		" - list [<path>]			List objects\n"
@@ -301,6 +473,7 @@ static int usage(const char *prog)
 		" - listen [<path>...]			Listen for events\n"
 		" - send <type> [<message>]		Send an event\n"
 		" - wait_for <object> [<object>...]	Wait for multiple objects to appear on ubus\n"
+		" - monitor				Monitor ubus traffic\n"
 		"\n", prog);
 	return 1;
 }
@@ -315,6 +488,7 @@ struct {
 	{ "listen", ubus_cli_listen },
 	{ "send", ubus_cli_send },
 	{ "wait_for", ubus_cli_wait_for },
+	{ "monitor", ubus_cli_monitor },
 };
 
 int main(int argc, char **argv)
@@ -327,7 +501,7 @@ int main(int argc, char **argv)
 
 	progname = argv[0];
 
-	while ((ch = getopt(argc, argv, "vs:t:S")) != -1) {
+	while ((ch = getopt(argc, argv, "m:M:vs:t:S")) != -1) {
 		switch (ch) {
 		case 's':
 			ubus_socket = optarg;
@@ -340,6 +514,22 @@ int main(int argc, char **argv)
 			break;
 		case 'v':
 			verbose++;
+			break;
+		case 'm':
+			if (add_monitor_type(optarg))
+			    return usage(progname);
+			break;
+		case 'M':
+			switch (optarg[0]) {
+			case 'r':
+				monitor_dir = 0;
+				break;
+			case 't':
+				monitor_dir = 1;
+				break;
+			default:
+				return usage(progname);
+			}
 			break;
 		default:
 			return usage(progname);
