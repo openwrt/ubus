@@ -54,7 +54,7 @@ static void wait_data(int fd, bool write)
 	struct pollfd pfd = { .fd = fd };
 
 	pfd.events = write ? POLLOUT : POLLIN;
-	poll(&pfd, 1, 0);
+	poll(&pfd, 1, -1);
 }
 
 static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
@@ -321,7 +321,7 @@ void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)
 		.events = POLLIN | POLLERR,
 	};
 
-	poll(&pfd, 1, timeout);
+	poll(&pfd, 1, timeout ? timeout : -1);
 	ubus_handle_data(&ctx->sock, ULOOP_READ);
 }
 
