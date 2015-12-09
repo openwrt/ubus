@@ -293,7 +293,8 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 
 	iov.iov_base = (char *)ctx->msgbuf.data + sizeof(hdrbuf.data);
 	iov.iov_len = blob_len(ctx->msgbuf.data);
-	if (iov.iov_len > 0 && !recv_retry(ctx->sock.fd, &iov, true, NULL))
+	if (iov.iov_len > 0 &&
+	    recv_retry(ctx->sock.fd, &iov, true, NULL) <= 0)
 		return false;
 
 	return true;
