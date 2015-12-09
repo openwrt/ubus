@@ -64,6 +64,8 @@ struct ubus_path {
 	const char name[];
 };
 
+extern const char *ubusd_acl_dir;
+
 struct ubus_msg_buf *ubus_msg_new(void *data, int len, bool shared);
 void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub, bool free);
 void ubus_msg_free(struct ubus_msg_buf *ub);

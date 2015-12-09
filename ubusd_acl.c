@@ -62,6 +62,7 @@ struct ubusd_acl_file {
 	int ok;
 };
 
+const char *ubusd_acl_dir = "/usr/share/acl.d";
 static struct blob_buf bbuf;
 static struct avl_tree ubusd_acls;
 static int ubusd_acl_seq;
@@ -379,8 +380,11 @@ ubusd_acl_load(void)
 	struct stat st;
 	glob_t gl;
 	int j;
+	const char *suffix = "/*.json";
+	char *path = alloca(strlen(ubusd_acl_dir) + strlen(suffix) + 1);
 
-	if (glob("/usr/share/acl.d/*.json", GLOB_NOESCAPE | GLOB_MARK, NULL, &gl))
+	sprintf(path, "%s%s", ubusd_acl_dir, suffix);
+	if (glob(path, GLOB_NOESCAPE | GLOB_MARK, NULL, &gl))
 		return;
 
 	vlist_update(&ubusd_acl_files);
