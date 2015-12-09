@@ -297,9 +297,6 @@ ubusd_acl_file_add(struct ubusd_acl_file *file)
 	else
 		return;
 
-	if (!tb[ACL_ACCESS] && !tb[ACL_PUBLISH] && !tb[ACL_INHERIT])
-		return;
-
 	if (tb[ACL_ACCESS])
 		blobmsg_for_each_attr(cur, tb[ACL_ACCESS], rem)
 			ubusd_acl_add_access(file, cur);
