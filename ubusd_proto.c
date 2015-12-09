@@ -257,7 +257,7 @@ static int ubusd_handle_invoke(struct ubus_client *cl, struct ubus_msg_buf *ub, 
 	method = blob_data(attr[UBUS_ATTR_METHOD]);
 
 	if (ubusd_acl_check(cl, obj->path.key, method, UBUS_ACL_ACCESS))
-		return UBUS_STATUS_NOT_FOUND;
+		return UBUS_STATUS_PERMISSION_DENIED;
 
 	if (!obj->client)
 		return obj->recv_msg(cl, ub, method, attr[UBUS_ATTR_DATA]);
