@@ -160,6 +160,10 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 		ubus_poll_data(ctx, (unsigned int) timeout);
 
 		uloop_cancelled = cancelled;
+		if (ctx->sock.eof) {
+			ubus_set_req_status(req, UBUS_STATUS_CONNECTION_FAILED);
+			break;
+		}
 	}
 	ctx->stack_depth--;
 	if (ctx->stack_depth)
