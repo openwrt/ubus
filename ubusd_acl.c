@@ -413,26 +413,28 @@ ubusd_reply_add(struct ubus_object *obj)
 
 	if (!obj->path.key)
 		return;
+
 	acl = avl_find_ge_element(&ubusd_acls, obj->path.key, acl, avl);
-	while (acl && !avl_is_last(&ubusd_acls, &acl->avl) &&
-		      !ubusd_acl_match_path(obj->path.key, acl->avl.key, NULL)) {
+	avl_for_element_to_last(&ubusd_acls, acl, acl, avl) {
+		void *c;
 
-		if (acl->priv) {
-			void *c = blobmsg_open_table(&b, NULL);
+		if (!acl->priv)
+			continue;
 
-			blobmsg_add_string(&b, "obj", obj->path.key);
-			if (acl->user)
-				blobmsg_add_string(&b, "user", acl->user);
-			if (acl->group)
-				blobmsg_add_string(&b, "group", acl->group);
+		if (!ubusd_acl_match_path(obj->path.key, acl->avl.key, NULL))
+			continue;
 
-			if (acl->priv)
-				blobmsg_add_field(&b, blobmsg_type(acl->priv), "acl",
-					blobmsg_data(acl->priv), blobmsg_data_len(acl->priv));
+		c = blobmsg_open_table(&b, NULL);
+		blobmsg_add_string(&b, "obj", obj->path.key);
+		if (acl->user)
+			blobmsg_add_string(&b, "user", acl->user);
+		if (acl->group)
+			blobmsg_add_string(&b, "group", acl->group);
 
-			blobmsg_close_table(&b, c);
-		}
-		acl = avl_next_element(acl, avl);
+		blobmsg_add_field(&b, blobmsg_type(acl->priv), "acl",
+			blobmsg_data(acl->priv), blobmsg_data_len(acl->priv));
+
+		blobmsg_close_table(&b, c);
 	}
 }
 static int ubusd_reply_query(struct ubus_client *cl, struct ubus_msg_buf *ub, struct blob_attr **attr, struct blob_attr *msg)
