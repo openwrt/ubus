@@ -105,16 +105,14 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 		return 0;
 
 	acl = avl_find_ge_element(&ubusd_acls, obj, acl, avl);
-	while (acl) {
+	avl_for_element_to_last(&ubusd_acls, acl, acl, avl) {
 		int diff = ubusd_acl_match_path(obj, acl->avl.key, NULL);
 
 		if (diff)
 			break;
 
-		if (ubusd_acl_match_cred(cl, acl)) {
-			acl = avl_next_element(acl, avl);
+		if (ubusd_acl_match_cred(cl, acl))
 			continue;
-		}
 
 		switch (type) {
 		case UBUS_ACL_PUBLISH:
@@ -135,7 +133,6 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 							return 0;
 			break;
 		}
-		acl = avl_next_element(acl, avl);
 	}
 
 	return -1;
