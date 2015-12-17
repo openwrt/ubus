@@ -358,6 +358,8 @@ struct ubus_context *ubus_connect(const char *path)
 void ubus_shutdown(struct ubus_context *ctx)
 {
 	blob_buf_free(&b);
+	if (!ctx)
+		return;
 	close(ctx->sock.fd);
 	free(ctx->msgbuf.data);
 }
