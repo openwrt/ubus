@@ -105,6 +105,9 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 		return 0;
 
 	acl = avl_find_ge_element(&ubusd_acls, obj, acl, avl);
+	if (!acl)
+		return -1;
+
 	avl_for_element_to_last(&ubusd_acls, acl, acl, avl) {
 		int diff = ubusd_acl_match_path(obj, acl->avl.key, NULL);
 
@@ -415,6 +418,9 @@ ubusd_reply_add(struct ubus_object *obj)
 		return;
 
 	acl = avl_find_ge_element(&ubusd_acls, obj->path.key, acl, avl);
+	if (!acl)
+		return;
+
 	avl_for_element_to_last(&ubusd_acls, acl, acl, avl) {
 		void *c;
 
