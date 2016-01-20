@@ -302,8 +302,9 @@ ubus_method_handler(struct ubus_context *ctx, struct ubus_object *obj,
 		lua_call(state, 2, 1);
 		if (lua_isnumber(state, -1))
 			rv = lua_tonumber(state, -1);
-	} else
-		lua_pop(state, 1);
+	}
+
+	lua_pop(state, 1);
 
 	return rv;
 }
