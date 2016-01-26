@@ -22,6 +22,7 @@ enum ubusd_acl_type {
 
 int ubusd_acl_check(struct ubus_client *cl, const char *obj, const char *method, enum ubusd_acl_type type);
 int ubusd_acl_init_client(struct ubus_client *cl, int fd);
+void ubusd_acl_free_client(struct ubus_client *cl);
 void ubusd_acl_load(void);
 
 #endif

@@ -500,6 +500,7 @@ void ubusd_proto_free_client(struct ubus_client *cl)
 		ubusd_free_object(obj);
 	}
 
+	ubusd_acl_free_client(cl);
 	ubus_free_id(&clients, &cl->id);
 }
 

@@ -174,6 +174,13 @@ ubusd_acl_init_client(struct ubus_client *cl, int fd)
 	return 0;
 }
 
+void
+ubusd_acl_free_client(struct ubus_client *cl)
+{
+	free(cl->group);
+	free(cl->user);
+}
+
 static void
 ubusd_acl_file_free(struct ubusd_acl_file *file)
 {
