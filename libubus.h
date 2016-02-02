@@ -240,6 +240,12 @@ void ubus_free(struct ubus_context *ctx);
 /* call this only for struct ubus_context pointers initialised by ubus_connect_ctx() */
 void ubus_shutdown(struct ubus_context *ctx);
 
+static inline void ubus_auto_shutdown(struct ubus_auto_conn *conn)
+{
+	uloop_timeout_cancel(&conn->timer);
+	ubus_shutdown(&conn->ctx);
+}
+
 const char *ubus_strerror(int error);
 
 static inline void ubus_add_uloop(struct ubus_context *ctx)
