@@ -344,6 +344,7 @@ static inline void ubus_defer_request(struct ubus_context *ctx,
 				      struct ubus_request_data *req,
 				      struct ubus_request_data *new_req)
 {
+    (void) ctx;
     memcpy(new_req, req, sizeof(*req));
     req->deferred = true;
 }
@@ -351,6 +352,7 @@ static inline void ubus_defer_request(struct ubus_context *ctx,
 static inline void ubus_request_set_fd(struct ubus_context *ctx,
 				       struct ubus_request_data *req, int fd)
 {
+    (void) ctx;
     req->fd = fd;
 }
 
