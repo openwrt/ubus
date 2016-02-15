@@ -110,8 +110,15 @@ static int ubus_msg_writev(int fd, struct ubus_msg_buf *ub, int offset)
 	}
 
 	if (offset < sizeof(ub->hdr)) {
-		iov[0].iov_base = ((char *) &ub->hdr) + offset;
-		iov[0].iov_len = sizeof(ub->hdr) - offset;
+		struct ubus_msghdr hdr;
+
+		hdr.version = ub->hdr.version;
+		hdr.type = ub->hdr.type;
+		hdr.seq = cpu_to_be16(ub->hdr.seq);
+		hdr.peer = cpu_to_be32(ub->hdr.peer);
+
+		iov[0].iov_base = ((char *) &hdr) + offset;
+		iov[0].iov_len = sizeof(hdr) - offset;
 		iov[1].iov_base = (char *) ub->data;
 		iov[1].iov_len = ub->len;
 
@@ -274,6 +281,9 @@ retry:
 		cl->pending_msg = ubus_msg_new(NULL, blob_raw_len(&cl->hdrbuf.data), false);
 		if (!cl->pending_msg)
 			goto disconnect;
+
+		cl->hdrbuf.hdr.seq = be16_to_cpu(cl->hdrbuf.hdr.seq);
+		cl->hdrbuf.hdr.peer = be32_to_cpu(cl->hdrbuf.hdr.peer);
 
 		memcpy(&cl->pending_msg->hdr, &cl->hdrbuf.hdr, sizeof(cl->hdrbuf.hdr));
 		memcpy(cl->pending_msg->data, &cl->hdrbuf.data, sizeof(cl->hdrbuf.data));

@@ -133,8 +133,8 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 
 	hdr.version = 0;
 	hdr.type = cmd;
-	hdr.seq = seq;
-	hdr.peer = peer;
+	hdr.seq = cpu_to_be16(seq);
+	hdr.peer = cpu_to_be32(peer);
 
 	if (!msg) {
 		blob_buf_init(&b, 0);
@@ -280,6 +280,9 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 
 		return false;
 	}
+
+	hdrbuf.hdr.seq = be16_to_cpu(hdrbuf.hdr.seq);
+	hdrbuf.hdr.peer = be32_to_cpu(hdrbuf.hdr.peer);
 
 	if (!ubus_validate_hdr(&hdrbuf.hdr))
 		return false;
