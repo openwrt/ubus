@@ -140,14 +140,28 @@ static int ubus_cli_call(struct ubus_context *ctx, int argc, char **argv)
 	return ubus_invoke(ctx, id, argv[1], b.head, receive_call_result_data, NULL, timeout * 1000);
 }
 
+struct cli_listen_data {
+	struct uloop_timeout timeout;
+	struct ubus_event_handler ev;
+	bool timed_out;
+};
+
+static void listen_timeout(struct uloop_timeout *timeout)
+{
+	struct cli_listen_data *data = container_of(timeout, struct cli_listen_data, timeout);
+	data->timed_out = true;
+	uloop_end();
+}
+
 static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 {
-	struct ubus_event_handler listener;
+	struct cli_listen_data data = {
+		.timeout.cb = listen_timeout,
+		.ev.cb = receive_event,
+		.timed_out = false,
+	};
 	const char *event;
 	int ret = 0;
-
-	memset(&listener, 0, sizeof(listener));
-	listener.cb = receive_event;
 
 	if (argc > 0) {
 		event = argv[0];
@@ -157,7 +171,7 @@ static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 	}
 
 	do {
-		ret = ubus_register_event_handler(ctx, &listener, event);
+		ret = ubus_register_event_handler(ctx, &data.ev, event);
 		if (ret)
 			break;
 
@@ -178,6 +192,7 @@ static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 
 	uloop_init();
 	ubus_add_uloop(ctx);
+	uloop_timeout_set(&data.timeout, timeout * 1000);
 	uloop_run();
 	uloop_done();
 
