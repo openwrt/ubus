@@ -142,7 +142,7 @@ static int ubus_cli_call(struct ubus_context *ctx, int argc, char **argv)
 
 static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 {
-	static struct ubus_event_handler listener;
+	struct ubus_event_handler listener;
 	const char *event;
 	int ret = 0;
 
@@ -479,7 +479,7 @@ static int usage(const char *prog)
 }
 
 
-struct {
+static struct {
 	const char *name;
 	int (*cb)(struct ubus_context *ctx, int argc, char **argv);
 } commands[] = {
@@ -494,7 +494,7 @@ struct {
 int main(int argc, char **argv)
 {
 	const char *progname, *ubus_socket = NULL;
-	static struct ubus_context *ctx;
+	struct ubus_context *ctx;
 	char *cmd;
 	int ret = 0;
 	int i, ch;
