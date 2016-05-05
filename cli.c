@@ -293,15 +293,18 @@ static int ubus_cli_wait_for(struct ubus_context *ctx, int argc, char **argv)
 	uloop_init();
 	ubus_add_uloop(ctx);
 
-	ret = ubus_lookup(ctx, NULL, wait_list_cb, &data);
+	ret = ubus_register_event_handler(ctx, &data.ev, "ubus.object.add");
 	if (ret)
 		return ret;
 
 	if (!data.n_pending)
 		return ret;
 
-	ret = ubus_register_event_handler(ctx, &data.ev, "ubus.object.add");
+	ret = ubus_lookup(ctx, NULL, wait_list_cb, &data);
 	if (ret)
+		return ret;
+
+	if (!data.n_pending)
 		return ret;
 
 	uloop_timeout_set(&data.timeout, timeout * 1000);
