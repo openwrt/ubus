@@ -294,6 +294,7 @@ int ubus_connect_ctx(struct ubus_context *ctx, const char *path)
 	avl_init(&ctx->objects, ubus_cmp_id, false, NULL);
 	if (ubus_reconnect(ctx, path)) {
 		free(ctx->msgbuf.data);
+		ctx->msgbuf.data = NULL;
 		return -1;
 	}
 
