@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2012 Jo-Philipp Wich <jow@openwrt.org>
  * Copyright (C) 2012 John Crispin <blogic@openwrt.org>
+ * Copyright (C) 2016 Iain Fraser <iainf@netduma.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -33,11 +34,18 @@ struct ubus_lua_connection {
 struct ubus_lua_object {
 	struct ubus_object o;
 	int r;
+	int rsubscriber;
 };
 
 struct ubus_lua_event {
 	struct ubus_event_handler e;
 	int r;
+};
+
+struct ubus_lua_subscriber {
+	struct ubus_subscriber s;
+	int rnotify;
+	int rremove;
 };
 
 static int
@@ -412,6 +420,39 @@ static int ubus_lua_load_methods(lua_State *L, struct ubus_method *m)
 	return 0;
 }
 
+static void
+ubus_new_sub_cb(struct ubus_context *ctx, struct ubus_object *obj)
+{
+	struct ubus_lua_object *luobj;
+
+	luobj = container_of(obj, struct ubus_lua_object, o);
+
+	lua_getglobal(state, "__ubus_cb_publisher");
+	lua_rawgeti(state, -1, luobj->rsubscriber);
+	lua_remove(state, -2);
+
+	if (lua_isfunction(state, -1)) {
+		lua_pushnumber(state, luobj->o.has_subscribers );
+		lua_call(state, 1, 0);
+	} else {
+		lua_pop(state, 1);
+	}
+}
+
+static void
+ubus_lua_load_newsub_cb( lua_State *L, struct ubus_lua_object *obj )
+{
+	/* keep ref to func */
+	lua_getglobal(L, "__ubus_cb_publisher");
+	lua_pushvalue(L, -2);
+	obj->rsubscriber = luaL_ref(L, -2);
+	lua_pop(L, 1);
+
+	/* real callback */
+	obj->o.subscribe_cb = ubus_new_sub_cb;
+	return;
+}
+
 static struct ubus_object* ubus_lua_load_object(lua_State *L)
 {
 	struct ubus_lua_object *obj = NULL;
@@ -454,6 +495,13 @@ static struct ubus_object* ubus_lua_load_object(lua_State *L)
 	/* scan each method */
 	lua_pushnil(L);
 	while (lua_next(L, -3) != 0) {
+                /* check if its the subscriber notification callback */
+                if( lua_type( L, -2 ) == LUA_TSTRING &&
+                                lua_type( L, -1 ) == LUA_TFUNCTION ){
+                  if( !strcmp( lua_tostring( L, -2 ), "__subscriber_cb" ) )
+                          ubus_lua_load_newsub_cb( L, obj );
+                }
+
 		/* check if it looks like a method */
 		if ((lua_type(L, -2) != LUA_TSTRING) ||
 				(lua_type(L, -1) != LUA_TTABLE) ||
@@ -495,12 +543,46 @@ static int ubus_lua_add(lua_State *L)
 		if ((lua_type(L, -2) == LUA_TSTRING) && (lua_type(L, -1) == LUA_TTABLE)) {
 			obj = ubus_lua_load_object(L);
 
-			if (obj)
+			if (obj){
 				ubus_add_object(c->ctx, obj);
+
+                                /* allow future reference of ubus obj */
+				lua_pushstring(state,"__ubusobj");
+				lua_pushlightuserdata(state, obj);
+				lua_settable(state,-3);
+                        }
 		}
 		lua_pop(L, 1);
 	}
 
+	return 0;
+}
+
+static int
+ubus_lua_notify( lua_State *L )
+{
+	struct ubus_lua_connection *c;
+	struct ubus_object *obj;
+	const char* method;
+
+	c = luaL_checkudata(L, 1, METANAME);
+	method = luaL_checkstring(L, 3);
+	luaL_checktype(L, 4, LUA_TTABLE);
+
+	if( !lua_islightuserdata( L, 2 ) ){
+		lua_pushfstring( L, "Invald 2nd parameter, expected ubus obj ref" );
+		lua_error( L );
+	}
+	obj = lua_touserdata( L, 2 );
+
+	/* create parameters from table */
+	blob_buf_init(&c->buf, 0);
+	if( !ubus_lua_format_blob_array( L, &c->buf, true ) ){
+		lua_pushfstring( L, "Invalid 4th parameter, expected table of arguments" );
+		lua_error( L );
+	}
+
+	ubus_notify( c->ctx, obj, method, c->buf.head, -1 );
 	return 0;
 }
 
@@ -653,6 +735,143 @@ ubus_lua_listen(lua_State *L) {
 	return 0;
 }
 
+static void
+ubus_sub_remove_handler(struct ubus_context *ctx, struct ubus_subscriber *s,
+                            uint32_t id)
+{
+	struct ubus_lua_subscriber *sub;
+
+	sub = container_of(s, struct ubus_lua_subscriber, s);
+
+	lua_getglobal(state, "__ubus_cb_subscribe");
+	lua_rawgeti(state, -1, sub->rremove);
+	lua_remove(state, -2);
+
+	if (lua_isfunction(state, -1)) {
+		lua_call(state, 0, 0);
+	} else {
+		lua_pop(state, 1);
+	}
+}
+
+static int
+ubus_sub_notify_handler(struct ubus_context *ctx, struct ubus_object *obj,
+            struct ubus_request_data *req, const char *method,
+            struct blob_attr *msg)
+{
+	struct ubus_subscriber *s;
+	struct ubus_lua_subscriber *sub;
+
+	s = container_of(obj, struct ubus_subscriber, obj);
+	sub = container_of(s, struct ubus_lua_subscriber, s);
+
+	lua_getglobal(state, "__ubus_cb_subscribe");
+	lua_rawgeti(state, -1, sub->rnotify);
+	lua_remove(state, -2);
+
+	if (lua_isfunction(state, -1)) {
+		if( msg ){
+			ubus_lua_parse_blob_array(state, blob_data(msg), blob_len(msg), true);
+			lua_call(state, 1, 0);
+		} else {
+			lua_call(state, 0, 0);
+		}
+	} else {
+		lua_pop(state, 1);
+	}
+
+	return 0;
+}
+
+
+
+static void
+ubus_lua_do_subscribe( struct ubus_context *ctx, lua_State *L, const char* target,
+                        int idxnotify, int idxremove )
+{
+	uint32_t id;
+	int status;
+	struct ubus_lua_subscriber *sub;
+
+	if( ( status = ubus_lookup_id( ctx, target, &id ) ) ){
+		lua_pushfstring( L, "Unable find target, status=%d", status );
+		lua_error( L );
+	}
+
+	sub = malloc( sizeof( struct ubus_lua_subscriber ) );
+	memset( sub, 0, sizeof( struct ubus_lua_subscriber ) );
+	if( !sub ){
+		lua_pushstring( L, "Out of memory" );
+		lua_error( L );
+	}
+
+	if( idxnotify ){
+		lua_getglobal(L, "__ubus_cb_subscribe");
+		lua_pushvalue(L, idxnotify);
+		sub->rnotify = luaL_ref(L, -2);
+		lua_pop(L, 1);
+		sub->s.cb = ubus_sub_notify_handler;
+	}
+
+	if( idxremove ){
+		lua_getglobal(L, "__ubus_cb_subscribe");
+		lua_pushvalue(L, idxnotify);
+		sub->rnotify = luaL_ref(L, -2);
+		lua_pop(L, 1);
+		sub->s.remove_cb = ubus_sub_remove_handler;
+	}
+
+	if( ( status = ubus_register_subscriber( ctx, &sub->s ) ) ){
+		lua_pushfstring( L, "Failed to register subscriber, status=%d", status );
+		lua_error( L );
+	}
+
+	if( ( status = ubus_subscribe( ctx, &sub->s, id) ) ){
+		lua_pushfstring( L, "Failed to register subscriber, status=%d", status );
+		lua_error( L );
+	}
+}
+
+static int
+ubus_lua_subscribe(lua_State *L) {
+	int idxnotify, idxremove, stackstart;
+	struct ubus_lua_connection *c;
+	const char* target;
+
+	idxnotify = idxremove = 0;
+	stackstart = lua_gettop( L );
+
+
+	c = luaL_checkudata(L, 1, METANAME);
+	target = luaL_checkstring(L, 2);
+	luaL_checktype(L, 3, LUA_TTABLE);
+
+
+	lua_pushstring( L, "notify");
+	lua_gettable( L, 3 );
+	if( lua_type( L, -1 ) == LUA_TFUNCTION ){
+		idxnotify = lua_gettop( L );
+	} else {
+		lua_pop( L, 1 );
+	}
+
+	lua_pushstring( L, "remove");
+	lua_gettable( L, 3 );
+	if( lua_type( L, -1 ) == LUA_TFUNCTION ){
+		idxremove = lua_gettop( L );
+	} else {
+		lua_pop( L, 1 );
+	}
+
+	if( idxnotify )
+		ubus_lua_do_subscribe( c->ctx, L, target, idxnotify, idxremove );
+
+	if( lua_gettop( L ) > stackstart )
+		lua_pop( L, lua_gettop( L ) - stackstart );
+
+	return 0;
+}
+
 static int
 ubus_lua_send(lua_State *L)
 {
@@ -699,12 +918,14 @@ static const luaL_Reg ubus[] = {
 	{ "connect", ubus_lua_connect },
 	{ "objects", ubus_lua_objects },
 	{ "add", ubus_lua_add },
+	{ "notify", ubus_lua_notify },
 	{ "reply", ubus_lua_reply },
 	{ "signatures", ubus_lua_signatures },
 	{ "call", ubus_lua_call },
 	{ "close", ubus_lua__gc },
 	{ "listen", ubus_lua_listen },
 	{ "send", ubus_lua_send },
+	{ "subscribe", ubus_lua_subscribe },
 	{ "__gc", ubus_lua__gc },
 	{ NULL, NULL },
 };
@@ -758,5 +979,12 @@ luaopen_ubus(lua_State *L)
 	lua_createtable(L, 1, 0);
 	lua_setglobal(L, "__ubus_cb_event");
 
+	/* create the subscriber table */
+	lua_createtable(L, 1, 0);
+	lua_setglobal(L, "__ubus_cb_subscribe");
+
+	/* create the publisher table - notifications of new subs */
+	lua_createtable(L, 1, 0);
+	lua_setglobal(L, "__ubus_cb_publisher");
 	return 0;
 }
