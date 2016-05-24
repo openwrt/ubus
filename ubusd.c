@@ -22,6 +22,9 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#ifdef ENABLE_SYSTEMD
+#include <systemd/sd-daemon.h>
+#endif
 
 #include <libubox/blob.h>
 #include <libubox/uloop.h>
@@ -380,8 +383,12 @@ static void sighup_handler(int sig)
 int main(int argc, char **argv)
 {
 	const char *ubus_socket = UBUS_UNIX_SOCKET;
+	bool remove_socket = true;
 	int ret = 0;
 	int ch;
+#ifdef ENABLE_SYSTEMD
+	int n_fds;
+#endif
 
 	signal(SIGPIPE, SIG_IGN);
 	signal(SIGHUP, sighup_handler);
@@ -402,19 +409,37 @@ int main(int argc, char **argv)
 		}
 	}
 
-	unlink(ubus_socket);
-	umask(0111);
-	server_fd.fd = usock(USOCK_UNIX | USOCK_SERVER | USOCK_NONBLOCK, ubus_socket, NULL);
-	if (server_fd.fd < 0) {
-		perror("usock");
-		ret = -1;
+#ifdef ENABLE_SYSTEMD
+	n_fds = sd_listen_fds(1);
+	if (n_fds > 1) {
+	        fprintf(stderr, "Too many file descriptors received.\n");
+	        ret = -1;
 		goto out;
+	} else if (n_fds == 1) {
+	        server_fd.fd = SD_LISTEN_FDS_START + 0;
+		fcntl(server_fd.fd, F_SETFD, fcntl(server_fd.fd, F_GETFD) | FD_CLOEXEC);
+		fcntl(server_fd.fd, F_SETFL, fcntl(server_fd.fd, F_GETFL) | O_NONBLOCK);
+
+		remove_socket = false;
+	} else
+#endif
+	{
+		unlink(ubus_socket);
+		umask(0111);
+		server_fd.fd = usock(USOCK_UNIX | USOCK_SERVER | USOCK_NONBLOCK, ubus_socket, NULL);
+		if (server_fd.fd < 0) {
+			perror("usock");
+			ret = -1;
+			goto out;
+		}
 	}
 	uloop_fd_add(&server_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
 	ubusd_acl_load();
 
 	uloop_run();
-	unlink(ubus_socket);
+
+	if (remove_socket)
+		unlink(ubus_socket);
 
 out:
 	uloop_done();
