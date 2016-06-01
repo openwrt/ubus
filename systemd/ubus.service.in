@@ -1,6 +1,0 @@
-[Unit]
-Description=OpenWrt micro bus
-Requires=ubus.socket
-
-[Service]
-ExecStart=@UBUSD_BINARY@
