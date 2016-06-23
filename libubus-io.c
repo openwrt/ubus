@@ -259,6 +259,7 @@ static bool alloc_msg_buf(struct ubus_context *ctx, int len)
 		return false;
 
 	ctx->msgbuf.data = ptr;
+	ctx->msgbuf_data_len = len;
 	return true;
 }
 
