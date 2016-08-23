@@ -130,8 +130,8 @@ static int ubusd_handle_remove_object(struct ubus_client *cl, struct ubus_msg_bu
 	if (obj->type && obj->type->refcount == 1)
 		blob_put_int32(&b, UBUS_ATTR_OBJTYPE, obj->type->id.id);
 
-	ubusd_free_object(obj);
 	ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
+	ubusd_free_object(obj);
 
 	return 0;
 }
