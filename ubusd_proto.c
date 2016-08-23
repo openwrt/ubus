@@ -146,7 +146,7 @@ static int ubusd_handle_add_object(struct ubus_client *cl, struct ubus_msg_buf *
 
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id.id);
-	if (attr[UBUS_ATTR_SIGNATURE])
+	if (attr[UBUS_ATTR_SIGNATURE] && obj->type)
 		blob_put_int32(&b, UBUS_ATTR_OBJTYPE, obj->type->id.id);
 
 	ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
@@ -158,6 +158,9 @@ static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, stru
 	struct ubus_method *m;
 	int cnt = 0;
 	void *s;
+
+	if (!obj->type)
+		return;
 
 	blob_buf_init(&b, 0);
 
