@@ -101,7 +101,7 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 	struct blob_attr *cur;
 	int rem;
 
-	if (!cl->uid)
+	if (!cl->uid || !obj)
 		return 0;
 
 	acl = avl_find_ge_element(&ubusd_acls, obj, acl, avl);
