@@ -434,7 +434,7 @@ ubusd_reply_add(struct ubus_object *obj)
 		if (!acl->priv)
 			continue;
 
-		if (!ubusd_acl_match_path(obj->path.key, acl->avl.key, NULL))
+		if (ubusd_acl_match_path(obj->path.key, acl->avl.key, NULL))
 			continue;
 
 		c = blobmsg_open_table(&b, NULL);
