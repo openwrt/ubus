@@ -352,6 +352,26 @@ static int ubus_lua_reply(lua_State *L)
 	return 0;
 }
 
+static int ubus_lua_defer_request(lua_State *L)
+{
+	struct ubus_lua_connection *c = luaL_checkudata(L, 1, METANAME);
+	struct ubus_request_data *req = lua_touserdata(L, 2);
+	struct ubus_request_data *new_req = lua_newuserdata(L, sizeof(struct ubus_request_data));
+	ubus_defer_request(c->ctx, req, new_req);
+
+	return 1;
+}
+
+static int ubus_lua_complete_deferred_request(lua_State *L)
+{
+	struct ubus_lua_connection *c = luaL_checkudata(L, 1, METANAME);
+	struct ubus_request_data *req = lua_touserdata(L, 2);
+	int ret = luaL_checkinteger(L, 3);
+	ubus_complete_deferred_request(c->ctx, req, ret);
+
+	return 0;
+}
+
 static int ubus_lua_load_methods(lua_State *L, struct ubus_method *m)
 {
 	struct blobmsg_policy *p;
@@ -920,6 +940,8 @@ static const luaL_Reg ubus[] = {
 	{ "add", ubus_lua_add },
 	{ "notify", ubus_lua_notify },
 	{ "reply", ubus_lua_reply },
+	{ "defer_request", ubus_lua_defer_request },
+	{ "complete_deferred_request", ubus_lua_complete_deferred_request },
 	{ "signatures", ubus_lua_signatures },
 	{ "call", ubus_lua_call },
 	{ "close", ubus_lua__gc },

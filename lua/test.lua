@@ -34,6 +34,18 @@ local my_method = {
 				conn:reply(req, {message="foo2"});
 				print("Call to function 'hello1'")
 			end, {id = ubus.INT32, msg = ubus.STRING }
+		},
+		deferred = {
+			function(req)
+				conn:reply(req, {message="wait for it"})
+				local def_req = conn:defer_request(req)
+				uloop.timer(function()
+						conn:reply(def_req, {message="done"})
+						conn:complete_deferred_request(def_req, 0)
+						print("Deferred request complete")
+					end, 2000)
+				print("Call to function 'deferred'")
+			end, {}
 		}
 	}
 }
