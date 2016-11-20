@@ -156,7 +156,7 @@ static int ubusd_handle_add_object(struct ubus_client *cl, struct ubus_msg_buf *
 static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, struct ubus_object *obj)
 {
 	struct ubus_method *m;
-	int cnt = 0;
+	int all_cnt = 0, cnt = 0;
 	void *s;
 
 	if (!obj->type)
@@ -170,6 +170,7 @@ static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, stru
 
 	s = blob_nest_start(&b, UBUS_ATTR_SIGNATURE);
 	list_for_each_entry(m, &obj->type->methods, list) {
+		all_cnt++;
 		if (!ubusd_acl_check(cl, obj->path.key, blobmsg_name(m->data), UBUS_ACL_ACCESS)) {
 			blobmsg_add_blob(&b, m->data);
 			cnt++;
@@ -177,7 +178,7 @@ static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, stru
 	}
 	blob_nest_end(&b, s);
 
-	if (cnt)
+	if (cnt || !all_cnt)
 		ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
 }
 
