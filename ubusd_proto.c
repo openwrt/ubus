@@ -377,7 +377,7 @@ static int ubusd_handle_add_watch(struct ubus_client *cl, struct ubus_msg_buf *u
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	target = ubusd_find_object(blob_get_u32(attr[UBUS_ATTR_TARGET]));
-	if (!target)
+	if (!target || !target->client)
 		return UBUS_STATUS_NOT_FOUND;
 
 	if (cl == target->client)
