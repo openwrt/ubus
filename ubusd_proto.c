@@ -80,11 +80,15 @@ void
 ubus_proto_send_msg_from_blob(struct ubus_client *cl, struct ubus_msg_buf *ub,
 			uint8_t type)
 {
+	/* keep the fd to be passed if it is UBUS_MSG_INVOKE */
+	int fd = ub->fd;
 	ub = ubus_reply_from_blob(ub, true);
 	if (!ub)
 		return;
 
 	ub->hdr.type = type;
+	ub->fd = fd;
+
 	ubus_msg_send(cl, ub, true);
 }
 
@@ -447,7 +451,7 @@ void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub
 	if (ub->hdr.type < __UBUS_MSG_LAST)
 		cb = handlers[ub->hdr.type];
 
-	if (ub->hdr.type != UBUS_MSG_STATUS)
+	if (ub->hdr.type != UBUS_MSG_STATUS && ub->hdr.type != UBUS_MSG_INVOKE)
 		ubus_msg_close_fd(ub);
 
 	if (cb)

@@ -188,6 +188,7 @@ struct ubus_request_data {
 	/* internal use */
 	bool deferred;
 	int fd;
+	int req_fd; /* fd received from the initial request */
 };
 
 struct ubus_request {
@@ -207,6 +208,8 @@ struct ubus_request {
 	ubus_data_handler_t data_cb;
 	ubus_fd_handler_t fd_cb;
 	ubus_complete_handler_t complete_cb;
+
+	int fd;
 
 	struct ubus_context *ctx;
 	void *priv;
@@ -336,6 +339,14 @@ int ubus_invoke(struct ubus_context *ctx, uint32_t obj, const char *method,
 int ubus_invoke_async(struct ubus_context *ctx, uint32_t obj, const char *method,
 		      struct blob_attr *msg, struct ubus_request *req);
 
+int ubus_invoke_fd(struct ubus_context *ctx, uint32_t obj, const char *method,
+		struct blob_attr *msg, ubus_data_handler_t cb, void *priv,
+		int timeout, int fd);
+
+/* asynchronous version of ubus_invoke() */
+int ubus_invoke_async_fd(struct ubus_context *ctx, uint32_t obj, const char *method,
+		      struct blob_attr *msg, struct ubus_request *req, int fd);
+
 /* send a reply to an incoming object method call */
 int ubus_send_reply(struct ubus_context *ctx, struct ubus_request_data *req,
 		    struct blob_attr *msg);
@@ -354,6 +365,14 @@ static inline void ubus_request_set_fd(struct ubus_context *ctx,
 {
     (void) ctx;
     req->fd = fd;
+}
+
+static inline int ubus_request_get_caller_fd(struct ubus_request_data *req)
+{
+    int fd = req->req_fd;
+    req->req_fd = -1;
+    
+    return fd;
 }
 
 void ubus_complete_deferred_request(struct ubus_context *ctx,

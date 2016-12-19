@@ -11,12 +11,13 @@
  * GNU General Public License for more details.
  */
 
+#include <unistd.h>
 #include "libubus.h"
 #include "libubus-internal.h"
 
 static void
 ubus_process_unsubscribe(struct ubus_context *ctx, struct ubus_msghdr *hdr,
-			 struct ubus_object *obj, struct blob_attr **attrbuf)
+			 struct ubus_object *obj, struct blob_attr **attrbuf, int fd)
 {
 	struct ubus_subscriber *s;
 
@@ -29,11 +30,13 @@ ubus_process_unsubscribe(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	s = container_of(obj, struct ubus_subscriber, obj);
 	if (s->remove_cb)
 		s->remove_cb(ctx, s, blob_get_u32(attrbuf[UBUS_ATTR_TARGET]));
+
+	close(fd);
 }
 
 static void
 ubus_process_notify(struct ubus_context *ctx, struct ubus_msghdr *hdr,
-		    struct ubus_object *obj, struct blob_attr **attrbuf)
+		    struct ubus_object *obj, struct blob_attr **attrbuf, int fd)
 {
 	if (!obj || !attrbuf[UBUS_ATTR_ACTIVE])
 		return;
@@ -41,14 +44,18 @@ ubus_process_notify(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	obj->has_subscribers = blob_get_u8(attrbuf[UBUS_ATTR_ACTIVE]);
 	if (obj->subscribe_cb)
 		obj->subscribe_cb(ctx, obj);
+
+	close(fd);
 }
 static void
 ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
-		    struct ubus_object *obj, struct blob_attr **attrbuf)
+		    struct ubus_object *obj, struct blob_attr **attrbuf, int fd)
 {
 	struct ubus_request_data req = {
 		.fd = -1,
+		.req_fd = fd,
 	};
+
 	int method;
 	int ret;
 	bool no_reply = false;
@@ -65,7 +72,7 @@ ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 
 	if (attrbuf[UBUS_ATTR_NO_REPLY])
 		no_reply = blob_get_int8(attrbuf[UBUS_ATTR_NO_REPLY]);
-
+		
 	req.peer = hdr->peer;
 	req.seq = hdr->seq;
 	req.object = obj->id;
@@ -88,6 +95,7 @@ found:
 	ret = obj->methods[method].handler(ctx, obj, &req,
 					   blob_data(attrbuf[UBUS_ATTR_METHOD]),
 					   attrbuf[UBUS_ATTR_DATA]);
+	close(req.req_fd);
 	if (req.deferred || no_reply)
 		return;
 
@@ -95,16 +103,16 @@ send:
 	ubus_complete_deferred_request(ctx, &req, ret);
 }
 
-void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf)
+
+void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd)
 {
 	void (*cb)(struct ubus_context *, struct ubus_msghdr *,
-		   struct ubus_object *, struct blob_attr **);
+		   struct ubus_object *, struct blob_attr **, int fd);
 	struct ubus_msghdr *hdr = &buf->hdr;
 	struct blob_attr **attrbuf;
 	struct ubus_object *obj;
 	uint32_t objid;
 	void *prev_data = NULL;
-
 	attrbuf = ubus_parse_msg(buf->data);
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
@@ -131,7 +139,7 @@ void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_
 		buf->data = NULL;
 	}
 
-	cb(ctx, hdr, obj, attrbuf);
+	cb(ctx, hdr, obj, attrbuf, fd);
 
 	if (prev_data) {
 		if (buf->data)

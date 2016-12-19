@@ -103,7 +103,7 @@ ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd)
 			break;
 		}
 
-		ubus_process_obj_msg(ctx, buf);
+		ubus_process_obj_msg(ctx, buf, fd);
 		break;
 	case UBUS_MSG_MONITOR:
 		if (ctx->monitor_cb)
