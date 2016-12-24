@@ -220,24 +220,9 @@ int ubus_send_reply(struct ubus_context *ctx, struct ubus_request_data *req,
 	return 0;
 }
 
-int ubus_invoke_async(struct ubus_context *ctx, uint32_t obj, const char *method,
-                       struct blob_attr *msg, struct ubus_request *req)
-{
-	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_OBJID, obj);
-	blob_put_string(&b, UBUS_ATTR_METHOD, method);
-	if (msg)
-		blob_put(&b, UBUS_ATTR_DATA, blob_data(msg), blob_len(msg));
-
-	if (ubus_start_request(ctx, req, b.head, UBUS_MSG_INVOKE, obj) < 0)
-		return UBUS_STATUS_INVALID_ARGUMENT;
-
-	return 0;
-}
-
-
-int ubus_invoke_async_fd(struct ubus_context *ctx, uint32_t obj, const char *method,
-                       struct blob_attr *msg, struct ubus_request *req, int fd)
+int ubus_invoke_async_fd(struct ubus_context *ctx, uint32_t obj,
+			 const char *method, struct blob_attr *msg,
+			 struct ubus_request *req, int fd)
 {
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, obj);
@@ -252,25 +237,9 @@ int ubus_invoke_async_fd(struct ubus_context *ctx, uint32_t obj, const char *met
 	return 0;
 }
 
-int ubus_invoke(struct ubus_context *ctx, uint32_t obj, const char *method,
-                struct blob_attr *msg, ubus_data_handler_t cb, void *priv,
-		int timeout)
-{
-	struct ubus_request req;
-	int rc;
-
-	rc = ubus_invoke_async(ctx, obj, method, msg, &req);
-	if (rc)
-		return rc;
-
-	req.data_cb = cb;
-	req.priv = priv;
-	return ubus_complete_request(ctx, &req, timeout);
-}
-
 int ubus_invoke_fd(struct ubus_context *ctx, uint32_t obj, const char *method,
-                struct blob_attr *msg, ubus_data_handler_t cb, void *priv,
-		int timeout, int fd)
+		   struct blob_attr *msg, ubus_data_handler_t cb, void *priv,
+		   int timeout, int fd)
 {
 	struct ubus_request req;
 	int rc;

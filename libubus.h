@@ -331,21 +331,26 @@ int ubus_register_acl(struct ubus_context *ctx);
 /* ----------- rpc ----------- */
 
 /* invoke a method on a specific object */
-int ubus_invoke(struct ubus_context *ctx, uint32_t obj, const char *method,
-		struct blob_attr *msg, ubus_data_handler_t cb, void *priv,
-		int timeout);
-
-/* asynchronous version of ubus_invoke() */
-int ubus_invoke_async(struct ubus_context *ctx, uint32_t obj, const char *method,
-		      struct blob_attr *msg, struct ubus_request *req);
-
 int ubus_invoke_fd(struct ubus_context *ctx, uint32_t obj, const char *method,
 		struct blob_attr *msg, ubus_data_handler_t cb, void *priv,
 		int timeout, int fd);
+static inline int
+ubus_invoke(struct ubus_context *ctx, uint32_t obj, const char *method,
+	    struct blob_attr *msg, ubus_data_handler_t cb, void *priv,
+	    int timeout)
+{
+	return ubus_invoke_fd(ctx, obj, method, msg, cb, priv, timeout, -1);
+}
 
 /* asynchronous version of ubus_invoke() */
 int ubus_invoke_async_fd(struct ubus_context *ctx, uint32_t obj, const char *method,
 		      struct blob_attr *msg, struct ubus_request *req, int fd);
+static inline int
+ubus_invoke_async(struct ubus_context *ctx, uint32_t obj, const char *method,
+		  struct blob_attr *msg, struct ubus_request *req)
+{
+	return ubus_invoke_async_fd(ctx, obj, method, msg, req, -1);
+}
 
 /* send a reply to an incoming object method call */
 int ubus_send_reply(struct ubus_context *ctx, struct ubus_request_data *req,
