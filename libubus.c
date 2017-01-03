@@ -362,6 +362,7 @@ void ubus_shutdown(struct ubus_context *ctx)
 	if (!ctx)
 		return;
 	close(ctx->sock.fd);
+	uloop_timeout_cancel(&ctx->pending_timer);
 	free(ctx->msgbuf.data);
 }
 
