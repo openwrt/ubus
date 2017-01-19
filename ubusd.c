@@ -148,11 +148,12 @@ void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub, bool free)
 
 	if (!cl->tx_queue[cl->txq_cur]) {
 		written = ubus_msg_writev(cl->sock.fd, ub, 0);
-		if (written >= ub->len + sizeof(ub->hdr))
-			goto out;
 
 		if (written < 0)
 			written = 0;
+
+		if (written >= ub->len + sizeof(ub->hdr))
+			goto out;
 
 		cl->txq_ofs = written;
 
