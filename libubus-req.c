@@ -140,13 +140,8 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 			  int req_timeout)
 {
 	ubus_complete_handler_t complete_cb = req->complete_cb;
-	bool registered = ctx->sock.registered;
 	int status = UBUS_STATUS_NO_DATA;
 	int64_t timeout = 0, time_end = 0;
-
-	if (!registered) {
-		ubus_add_uloop(ctx);
-	}
 
 	if (req_timeout)
 		time_end = get_time_msec() + req_timeout;
@@ -186,12 +181,8 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 	if (req->complete_cb)
 		req->complete_cb(req, status);
 
-	if (!registered) {
-		uloop_fd_delete(&ctx->sock);
-
-		if (!ctx->stack_depth)
-			ctx->pending_timer.cb(&ctx->pending_timer);
-	}
+	if (!ctx->stack_depth && !ctx->sock.registered)
+		ctx->pending_timer.cb(&ctx->pending_timer);
 
 	return status;
 }
