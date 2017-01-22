@@ -277,6 +277,7 @@ static void ubus_default_connection_lost(struct ubus_context *ctx)
 
 int ubus_connect_ctx(struct ubus_context *ctx, const char *path)
 {
+	uloop_init();
 	memset(ctx, 0, sizeof(*ctx));
 
 	ctx->sock.fd = -1;

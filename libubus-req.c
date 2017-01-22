@@ -145,7 +145,6 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 	int64_t timeout = 0, time_end = 0;
 
 	if (!registered) {
-		uloop_init();
 		ubus_add_uloop(ctx);
 	}
 
