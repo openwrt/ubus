@@ -32,8 +32,15 @@
 
 static struct ubus_msg_buf *ubus_msg_ref(struct ubus_msg_buf *ub)
 {
-	if (ub->refcount == ~0)
-		return ubus_msg_new(ub->data, ub->len, false);
+	struct ubus_msg_buf *new_ub;
+	if (ub->refcount == ~0) {
+		new_ub = ubus_msg_new(ub->data, ub->len, false);
+		if (!new_ub)
+			return NULL;
+		memcpy(&new_ub->hdr, &ub->hdr, sizeof(struct ubus_msghdr));
+		new_ub->fd = ub->fd;
+		return new_ub;
+	}
 
 	ub->refcount++;
 	return ub;
