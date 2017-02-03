@@ -154,9 +154,10 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	return ret;
 }
 
-static int recv_retry(int fd, struct iovec *iov, bool wait, int *recv_fd)
+static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, int *recv_fd)
 {
 	int bytes, total = 0;
+	int fd = ctx->sock.fd;
 	static struct {
 		struct cmsghdr h;
 		int fd;
@@ -191,7 +192,7 @@ static int recv_retry(int fd, struct iovec *iov, bool wait, int *recv_fd)
 
 		if (bytes < 0) {
 			bytes = 0;
-			if (uloop_cancelled)
+			if (uloop_cancelling() || ctx->cancel_poll)
 				return 0;
 			if (errno == EINTR)
 				continue;
@@ -274,7 +275,7 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	int r;
 
 	/* receive header + start attribute */
-	r = recv_retry(ctx->sock.fd, &iov, false, recv_fd);
+	r = recv_retry(ctx, &iov, false, recv_fd);
 	if (r <= 0) {
 		if (r < 0)
 			ctx->sock.eof = true;
@@ -298,7 +299,7 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	iov.iov_base = (char *)ctx->msgbuf.data + sizeof(hdrbuf.data);
 	iov.iov_len = blob_len(ctx->msgbuf.data);
 	if (iov.iov_len > 0 &&
-	    recv_retry(ctx->sock.fd, &iov, true, NULL) <= 0)
+	    recv_retry(ctx, &iov, true, NULL) <= 0)
 		return false;
 
 	return true;
@@ -311,7 +312,7 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 
 	while (get_next_msg(ctx, &recv_fd)) {
 		ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
-		if (uloop_cancelled)
+		if (uloop_cancelling() || ctx->cancel_poll)
 			break;
 	}
 
@@ -326,6 +327,7 @@ void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)
 		.events = POLLIN | POLLERR,
 	};
 
+	ctx->cancel_poll = false;
 	poll(&pfd, 1, timeout ? timeout : -1);
 	ubus_handle_data(&ctx->sock, ULOOP_READ);
 }

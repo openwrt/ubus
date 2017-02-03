@@ -122,7 +122,7 @@ static void ubus_sync_req_cb(struct ubus_request *req, int ret)
 {
 	req->status_msg = true;
 	req->status_code = ret;
-	uloop_end();
+	req->ctx->cancel_poll = true;
 }
 
 static int64_t get_time_msec(void)
@@ -151,28 +151,26 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 
 	ctx->stack_depth++;
 	while (!req->status_msg) {
-		bool cancelled = uloop_cancelled;
-
-		uloop_cancelled = false;
 		if (req_timeout) {
 			timeout = time_end - get_time_msec();
 			if (timeout <= 0) {
 				ubus_set_req_status(req, UBUS_STATUS_TIMEOUT);
-				uloop_cancelled = cancelled;
 				break;
 			}
 		}
+
 		ubus_poll_data(ctx, (unsigned int) timeout);
 
-		uloop_cancelled = cancelled;
 		if (ctx->sock.eof) {
 			ubus_set_req_status(req, UBUS_STATUS_CONNECTION_FAILED);
+			ctx->cancel_poll = true;
 			break;
 		}
 	}
+
 	ctx->stack_depth--;
 	if (ctx->stack_depth)
-		uloop_cancelled = true;
+		ctx->cancel_poll = true;
 
 	if (req->status_msg)
 		status = req->status_code;

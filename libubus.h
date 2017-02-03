@@ -155,6 +155,7 @@ struct ubus_context {
 
 	uint32_t local_id;
 	uint16_t request_seq;
+	bool cancel_poll;
 	int stack_depth;
 
 	void (*connection_lost)(struct ubus_context *ctx);
