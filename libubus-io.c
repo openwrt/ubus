@@ -372,6 +372,7 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 		close(ctx->sock.fd);
 	}
 
+	ctx->sock.eof = false;
 	ctx->sock.fd = usock(USOCK_UNIX, path, NULL);
 	if (ctx->sock.fd < 0)
 		return UBUS_STATUS_CONNECTION_FAILED;
