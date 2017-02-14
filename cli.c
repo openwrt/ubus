@@ -94,8 +94,7 @@ static void receive_call_result_data(struct ubus_request *req, int type, struct 
 	free(str);
 }
 
-static void receive_event(struct ubus_context *ctx, struct ubus_event_handler *ev,
-			  const char *type, struct blob_attr *msg)
+static void print_event(const char *type, struct blob_attr *msg)
 {
 	char *str;
 
@@ -103,6 +102,20 @@ static void receive_event(struct ubus_context *ctx, struct ubus_event_handler *e
 	printf("{ \"%s\": %s }\n", type, str);
 	fflush(stdout);
 	free(str);
+}
+
+static int receive_request(struct ubus_context *ctx, struct ubus_object *obj,
+			    struct ubus_request_data *req,
+			    const char *method, struct blob_attr *msg)
+{
+	print_event(method, msg);
+	return 0;
+}
+
+static void receive_event(struct ubus_context *ctx, struct ubus_event_handler *ev,
+			  const char *type, struct blob_attr *msg)
+{
+	print_event(type, msg);
 }
 
 static int ubus_cli_list(struct ubus_context *ctx, int argc, char **argv)
@@ -142,7 +155,6 @@ static int ubus_cli_call(struct ubus_context *ctx, int argc, char **argv)
 
 struct cli_listen_data {
 	struct uloop_timeout timeout;
-	struct ubus_event_handler ev;
 	bool timed_out;
 };
 
@@ -153,13 +165,23 @@ static void listen_timeout(struct uloop_timeout *timeout)
 	uloop_end();
 }
 
+static void do_listen(struct ubus_context *ctx, struct cli_listen_data *data)
+{
+	memset(data, 0, sizeof(*data));
+	data->timeout.cb = listen_timeout;
+	uloop_init();
+	ubus_add_uloop(ctx);
+	uloop_timeout_set(&data->timeout, timeout * 1000);
+	uloop_run();
+	uloop_done();
+}
+
 static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 {
-	struct cli_listen_data data = {
-		.timeout.cb = listen_timeout,
-		.ev.cb = receive_event,
-		.timed_out = false,
+	struct ubus_event_handler ev = {
+		.cb = receive_event,
 	};
+	struct cli_listen_data data;
 	const char *event;
 	int ret = 0;
 
@@ -171,7 +193,7 @@ static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 	}
 
 	do {
-		ret = ubus_register_event_handler(ctx, &data.ev, event);
+		ret = ubus_register_event_handler(ctx, &ev, event);
 		if (ret)
 			break;
 
@@ -190,14 +212,51 @@ static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 		return -1;
 	}
 
-	uloop_init();
-	ubus_add_uloop(ctx);
-	uloop_timeout_set(&data.timeout, timeout * 1000);
-	uloop_run();
-	uloop_done();
+	do_listen(ctx, &data);
 
 	return 0;
 }
+
+static int ubus_cli_subscribe(struct ubus_context *ctx, int argc, char **argv)
+{
+	struct ubus_subscriber sub = {
+		.cb = receive_request,
+	};
+	struct cli_listen_data data;
+	const char *event;
+	int ret = 0;
+
+	if (argc > 0) {
+		event = argv[0];
+	} else {
+		if (!simple_output)
+			fprintf(stderr, "You need to specify an object to subscribe to\n");
+		return -1;
+	}
+
+	ret = ubus_register_subscriber(ctx, &sub);
+	for (; !ret && argc > 0; argc--, argv++) {
+		uint32_t id;
+
+		ret = ubus_lookup_id(ctx, argv[0], &id);
+		if (ret)
+			break;
+
+		ret = ubus_subscribe(ctx, &sub, id);
+	}
+
+	if (ret) {
+		if (!simple_output)
+			fprintf(stderr, "Error while registering for event '%s': %s\n",
+				event, ubus_strerror(ret));
+		return -1;
+	}
+
+	do_listen(ctx, &data);
+
+	return 0;
+}
+
 
 static int ubus_cli_send(struct ubus_context *ctx, int argc, char **argv)
 {
@@ -504,6 +563,7 @@ static struct {
 	{ "list", ubus_cli_list },
 	{ "call", ubus_cli_call },
 	{ "listen", ubus_cli_listen },
+	{ "subscribe", ubus_cli_subscribe },
 	{ "send", ubus_cli_send },
 	{ "wait_for", ubus_cli_wait_for },
 	{ "monitor", ubus_cli_monitor },
