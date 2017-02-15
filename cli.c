@@ -17,6 +17,7 @@
 #include "libubus.h"
 
 static struct blob_buf b;
+static int listen_timeout;
 static int timeout = 30;
 static bool simple_output = false;
 static int verbose = 0;
@@ -171,7 +172,8 @@ static void do_listen(struct ubus_context *ctx, struct cli_listen_data *data)
 	data->timeout.cb = listen_timeout;
 	uloop_init();
 	ubus_add_uloop(ctx);
-	uloop_timeout_set(&data->timeout, timeout * 1000);
+	if (listen_timeout)
+		uloop_timeout_set(&data->timeout, listen_timeout * 1000);
 	uloop_run();
 	uloop_done();
 }
@@ -585,6 +587,7 @@ int main(int argc, char **argv)
 			ubus_socket = optarg;
 			break;
 		case 't':
+			listen_timeout = atoi(optarg);
 			timeout = atoi(optarg);
 			break;
 		case 'S':
