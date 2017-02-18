@@ -159,7 +159,7 @@ struct cli_listen_data {
 	bool timed_out;
 };
 
-static void listen_timeout(struct uloop_timeout *timeout)
+static void ubus_cli_listen_timeout(struct uloop_timeout *timeout)
 {
 	struct cli_listen_data *data = container_of(timeout, struct cli_listen_data, timeout);
 	data->timed_out = true;
@@ -169,7 +169,7 @@ static void listen_timeout(struct uloop_timeout *timeout)
 static void do_listen(struct ubus_context *ctx, struct cli_listen_data *data)
 {
 	memset(data, 0, sizeof(*data));
-	data->timeout.cb = listen_timeout;
+	data->timeout.cb = ubus_cli_listen_timeout;
 	uloop_init();
 	ubus_add_uloop(ctx);
 	if (listen_timeout)
