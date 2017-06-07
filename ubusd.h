@@ -39,6 +39,7 @@ struct ubus_msg_buf {
 struct ubus_client {
 	struct ubus_id id;
 	struct uloop_fd sock;
+	struct blob_buf b;
 
 	uid_t uid;
 	gid_t gid;
@@ -51,6 +52,7 @@ struct ubus_client {
 	unsigned int txq_cur, txq_tail, txq_ofs;
 
 	struct ubus_msg_buf *pending_msg;
+	struct ubus_msg_buf *retmsg;
 	int pending_msg_offset;
 	int pending_msg_fd;
 	struct {

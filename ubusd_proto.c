@@ -17,8 +17,6 @@
 #include "ubusd.h"
 
 struct blob_buf b;
-static struct ubus_msg_buf *retmsg;
-static int *retmsg_data;
 static struct avl_tree clients;
 
 static struct blob_attr *attrbuf[UBUS_ATTR_MAX];
@@ -441,6 +439,8 @@ void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub
 {
 	ubus_cmd_cb cb = NULL;
 	int ret;
+	struct ubus_msg_buf *retmsg = cl->retmsg;
+	int *retmsg_data = blob_data(blob_data(retmsg->data));
 
 	retmsg->hdr.seq = ub->hdr.seq;
 	retmsg->hdr.peer = ub->hdr.peer;
@@ -467,6 +467,22 @@ void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub
 	ubus_msg_send(cl, retmsg);
 }
 
+static int ubusd_proto_init_retmsg(struct ubus_client *cl)
+{
+	struct blob_buf *b = &cl->b;
+
+	blob_buf_init(&cl->b, 0);
+	blob_put_int32(&cl->b, UBUS_ATTR_STATUS, 0);
+
+	/* we make the 'retmsg' buffer shared with the blob_buf b, to reduce mem duplication */
+	cl->retmsg = ubus_msg_new(b->head, blob_raw_len(b->head), true);
+	if (!cl->retmsg)
+		return -1;
+
+	cl->retmsg->hdr.type = UBUS_MSG_STATUS;
+	return 0;
+}
+
 struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
 {
 	struct ubus_client *cl;
@@ -484,6 +500,9 @@ struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
 	cl->pending_msg_fd = -1;
 
 	if (!ubus_alloc_id(&clients, &cl->id, 0))
+		goto free;
+
+	if (ubusd_proto_init_retmsg(cl))
 		goto free;
 
 	if (!ubusd_send_hello(cl))
@@ -506,6 +525,8 @@ void ubusd_proto_free_client(struct ubus_client *cl)
 		obj = list_first_entry(&cl->objects, struct ubus_object, list);
 		ubusd_free_object(obj);
 	}
+	ubus_msg_free(cl->retmsg);
+	blob_buf_free(&cl->b);
 
 	ubusd_acl_free_client(cl);
 	ubus_free_id(&clients, &cl->id);
@@ -550,14 +571,4 @@ void ubus_notify_unsubscribe(struct ubus_subscription *s)
 static void __constructor ubusd_proto_init(void)
 {
 	ubus_init_id_tree(&clients);
-
-	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_STATUS, 0);
-
-	retmsg = ubus_msg_from_blob(false);
-	if (!retmsg)
-		exit(1);
-
-	retmsg->hdr.type = UBUS_MSG_STATUS;
-	retmsg_data = blob_data(blob_data(retmsg->data));
 }
