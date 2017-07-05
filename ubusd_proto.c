@@ -89,7 +89,8 @@ ubus_proto_send_msg_from_blob(struct ubus_client *cl, struct ubus_msg_buf *ub,
 	ub->hdr.type = type;
 	ub->fd = fd;
 
-	ubus_msg_send(cl, ub, true);
+	ubus_msg_send(cl, ub);
+	ubus_msg_free(ub);
 }
 
 static bool ubusd_send_hello(struct ubus_client *cl)
@@ -102,14 +103,15 @@ static bool ubusd_send_hello(struct ubus_client *cl)
 		return false;
 
 	ubus_msg_init(ub, UBUS_MSG_HELLO, 0, cl->id.id);
-	ubus_msg_send(cl, ub, true);
+	ubus_msg_send(cl, ub);
+	ubus_msg_free(ub);
 	return true;
 }
 
 static int ubusd_send_pong(struct ubus_client *cl, struct ubus_msg_buf *ub, struct blob_attr **attr)
 {
 	ub->hdr.type = UBUS_MSG_DATA;
-	ubus_msg_send(cl, ub, false);
+	ubus_msg_send(cl, ub);
 	return 0;
 }
 
@@ -274,7 +276,6 @@ static int ubusd_handle_invoke(struct ubus_client *cl, struct ubus_msg_buf *ub, 
 	blob_buf_init(&b, 0);
 
 	ubusd_forward_invoke(cl, obj, method, ub, attr[UBUS_ATTR_DATA]);
-	ubus_msg_free(ub);
 
 	return -1;
 }
@@ -322,7 +323,6 @@ static int ubusd_handle_notify(struct ubus_client *cl, struct ubus_msg_buf *ub, 
 			blob_put_int8(&b, UBUS_ATTR_NO_REPLY, 1);
 		ubusd_forward_invoke(cl, s->subscriber, method, ub, attr[UBUS_ATTR_DATA]);
 	}
-	ubus_msg_free(ub);
 
 	return -1;
 }
@@ -359,11 +359,8 @@ static int ubusd_handle_response(struct ubus_client *cl, struct ubus_msg_buf *ub
 		goto error;
 
 	ub->hdr.peer = blob_get_u32(attr[UBUS_ATTR_OBJID]);
-	ubus_msg_send(cl, ub, true);
-	return -1;
-
+	ubus_msg_send(cl, ub);
 error:
-	ubus_msg_free(ub);
 	return -1;
 }
 
@@ -454,18 +451,20 @@ void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub
 	if (ub->hdr.type != UBUS_MSG_STATUS && ub->hdr.type != UBUS_MSG_INVOKE)
 		ubus_msg_close_fd(ub);
 
+	/* Note: no callback should free the `ub` buffer
+	         that's always done right after the callback finishes */
 	if (cb)
 		ret = cb(cl, ub, ubus_parse_msg(ub->data));
 	else
 		ret = UBUS_STATUS_INVALID_COMMAND;
 
+	ubus_msg_free(ub);
+
 	if (ret == -1)
 		return;
 
-	ubus_msg_free(ub);
-
 	*retmsg_data = htonl(ret);
-	ubus_msg_send(cl, retmsg, false);
+	ubus_msg_send(cl, retmsg);
 }
 
 struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
@@ -526,7 +525,8 @@ void ubus_notify_subscription(struct ubus_object *obj)
 		return;
 
 	ubus_msg_init(ub, UBUS_MSG_NOTIFY, ++obj->invoke_seq, 0);
-	ubus_msg_send(obj->client, ub, true);
+	ubus_msg_send(obj->client, ub);
+	ubus_msg_free(ub);
 }
 
 void ubus_notify_unsubscribe(struct ubus_subscription *s)
@@ -540,7 +540,8 @@ void ubus_notify_unsubscribe(struct ubus_subscription *s)
 	ub = ubus_msg_from_blob(false);
 	if (ub != NULL) {
 		ubus_msg_init(ub, UBUS_MSG_UNSUBSCRIBE, ++s->subscriber->invoke_seq, 0);
-		ubus_msg_send(s->subscriber->client, ub, true);
+		ubus_msg_send(s->subscriber->client, ub);
+		ubus_msg_free(ub);
 	}
 
 	ubus_unsubscribe(s);

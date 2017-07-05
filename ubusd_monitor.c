@@ -76,7 +76,8 @@ ubusd_monitor_message(struct ubus_client *cl, struct ubus_msg_buf *ub, bool send
 		ub = ubus_msg_new(mb.head, blob_raw_len(mb.head), true);
 		ub->hdr.type = UBUS_MSG_MONITOR;
 		ub->hdr.seq = ++m->seq;
-		ubus_msg_send(m->cl, ub, true);
+		ubus_msg_send(m->cl, ub);
+		ubus_msg_free(ub);
 	}
 }
 

@@ -129,7 +129,7 @@ static void ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *c
 	*objid_ptr = htonl(obj->id.id);
 
 	(*ub)->hdr.seq = ++event_seq;
-	ubus_msg_send(obj->client, *ub, false);
+	ubus_msg_send(obj->client, *ub);
 }
 
 static bool strmatch_len(const char *s1, const char *s2, int *len)

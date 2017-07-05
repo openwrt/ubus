@@ -146,7 +146,7 @@ static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
 }
 
 /* takes the msgbuf reference */
-void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub, bool free)
+void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub)
 {
 	int written;
 
@@ -160,7 +160,7 @@ void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub, bool free)
 			written = 0;
 
 		if (written >= ub->len + sizeof(ub->hdr))
-			goto out;
+			return;
 
 		cl->txq_ofs = written;
 
@@ -168,10 +168,6 @@ void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub, bool free)
 		uloop_fd_add(&cl->sock, ULOOP_READ | ULOOP_WRITE | ULOOP_EDGE_TRIGGER);
 	}
 	ubus_msg_enqueue(cl, ub);
-
-out:
-	if (free)
-		ubus_msg_free(ub);
 }
 
 static struct ubus_msg_buf *ubus_msg_head(struct ubus_client *cl)
