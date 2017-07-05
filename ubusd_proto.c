@@ -345,22 +345,22 @@ static int ubusd_handle_response(struct ubus_client *cl, struct ubus_msg_buf *ub
 	if (!attr[UBUS_ATTR_OBJID] ||
 	    (ub->hdr.type == UBUS_MSG_STATUS && !attr[UBUS_ATTR_STATUS]) ||
 	    (ub->hdr.type == UBUS_MSG_DATA && !attr[UBUS_ATTR_DATA]))
-		goto error;
+		goto out;
 
 	obj = ubusd_find_object(blob_get_u32(attr[UBUS_ATTR_OBJID]));
 	if (!obj)
-		goto error;
+		goto out;
 
 	if (cl != obj->client)
-		goto error;
+		goto out;
 
 	cl = ubusd_get_client_by_id(ub->hdr.peer);
 	if (!cl)
-		goto error;
+		goto out;
 
 	ub->hdr.peer = blob_get_u32(attr[UBUS_ATTR_OBJID]);
 	ubus_msg_send(cl, ub);
-error:
+out:
 	return -1;
 }
 
