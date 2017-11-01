@@ -253,6 +253,18 @@ ubus_notify_complete_cb(struct ubus_request *req, int ret)
 	nreq->complete_cb(nreq, 0, 0);
 }
 
+static void
+ubus_notify_data_cb(struct ubus_request *req, int type, struct blob_attr *msg)
+{
+	struct ubus_notify_request *nreq;
+
+	nreq = container_of(req, struct ubus_notify_request, req);
+	if (!nreq->data_cb)
+		return;
+
+	nreq->data_cb(nreq, type, msg);
+}
+
 static int
 __ubus_notify_async(struct ubus_context *ctx, struct ubus_object *obj,
 		    const char *type, struct blob_attr *msg,
@@ -278,6 +290,7 @@ __ubus_notify_async(struct ubus_context *ctx, struct ubus_object *obj,
 	req->pending = 1;
 	req->id[0] = obj->id;
 	req->req.complete_cb = ubus_notify_complete_cb;
+	req->req.data_cb = ubus_notify_data_cb;
 
 	return 0;
 }
