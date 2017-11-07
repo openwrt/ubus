@@ -410,11 +410,10 @@ static int ubus_lua_load_methods(lua_State *L, struct ubus_method *m)
 	}
 
 	/* setup the policy pointers */
-	p = malloc(sizeof(struct blobmsg_policy) * plen);
+	p = calloc(plen, sizeof(struct blobmsg_policy));
 	if (!p)
 		return 1;
 
-	memset(p, 0, sizeof(struct blobmsg_policy) * plen);
 	m->policy = p;
 	lua_pushnil(L);
 	while (lua_next(L, -2) != 0) {
@@ -481,26 +480,23 @@ static struct ubus_object* ubus_lua_load_object(lua_State *L)
 	int midx = 0;
 
 	/* setup object pointers */
-	obj = malloc(sizeof(struct ubus_lua_object));
+	obj = calloc(1, sizeof(struct ubus_lua_object));
 	if (!obj)
 		return NULL;
 
-	memset(obj, 0, sizeof(struct ubus_lua_object));
 	obj->o.name = lua_tostring(L, -2);
 
 	/* setup method pointers */
-	m = malloc(sizeof(struct ubus_method) * mlen);
-	memset(m, 0, sizeof(struct ubus_method) * mlen);
+	m = calloc(mlen, sizeof(struct ubus_method));
 	obj->o.methods = m;
 
 	/* setup type pointers */
-	obj->o.type = malloc(sizeof(struct ubus_object_type));
+	obj->o.type = calloc(1, sizeof(struct ubus_object_type));
 	if (!obj->o.type) {
 		free(obj);
 		return NULL;
 	}
 
-	memset(obj->o.type, 0, sizeof(struct ubus_object_type));
 	obj->o.type->name = lua_tostring(L, -2);
 	obj->o.type->id = 0;
 	obj->o.type->methods = obj->o.methods;
@@ -715,11 +711,10 @@ ubus_lua_load_event(lua_State *L)
 {
 	struct ubus_lua_event* event = NULL;
 
-	event = malloc(sizeof(struct ubus_lua_event));
+	event = calloc(1, sizeof(struct ubus_lua_event));
 	if (!event)
 		return NULL;
 
-	memset(event, 0, sizeof(struct ubus_lua_event));
 	event->e.cb = ubus_event_handler;
 
 	/* update the he callback lookup table */
@@ -818,8 +813,7 @@ ubus_lua_do_subscribe( struct ubus_context *ctx, lua_State *L, const char* targe
 		lua_error( L );
 	}
 
-	sub = malloc( sizeof( struct ubus_lua_subscriber ) );
-	memset( sub, 0, sizeof( struct ubus_lua_subscriber ) );
+	sub = calloc( 1, sizeof( struct ubus_lua_subscriber ) );
 	if( !sub ){
 		lua_pushstring( L, "Out of memory" );
 		lua_error( L );

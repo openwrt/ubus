@@ -133,7 +133,7 @@ struct ubus_lookup_request {
 static void ubus_lookup_cb(struct ubus_request *ureq, int type, struct blob_attr *msg)
 {
 	struct ubus_lookup_request *req;
-	struct ubus_object_data obj;
+	struct ubus_object_data obj = {};
 	struct blob_attr **attr;
 
 	req = container_of(ureq, struct ubus_lookup_request, req);
@@ -143,7 +143,6 @@ static void ubus_lookup_cb(struct ubus_request *ureq, int type, struct blob_attr
 	    !attr[UBUS_ATTR_OBJTYPE])
 		return;
 
-	memset(&obj, 0, sizeof(obj));
 	obj.id = blob_get_u32(attr[UBUS_ATTR_OBJID]);
 	obj.path = blob_data(attr[UBUS_ATTR_OBJPATH]);
 	obj.type_id = blob_get_u32(attr[UBUS_ATTR_OBJTYPE]);
@@ -220,7 +219,7 @@ int ubus_register_event_handler(struct ubus_context *ctx,
 				const char *pattern)
 {
 	struct ubus_object *obj = &ev->obj;
-	struct blob_buf b2;
+	struct blob_buf b2 = {};
 	int ret;
 
 	if (!obj->id) {
@@ -236,7 +235,6 @@ int ubus_register_event_handler(struct ubus_context *ctx,
 	}
 
 	/* use a second buffer, ubus_invoke() overwrites the primary one */
-	memset(&b2, 0, sizeof(b2));
 	blob_buf_init(&b2, 0);
 	blobmsg_add_u32(&b2, "object", obj->id);
 	if (pattern)
