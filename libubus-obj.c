@@ -237,12 +237,12 @@ static void ubus_remove_object_cb(struct ubus_request *req, int type, struct blo
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
 
+	avl_delete(&req->ctx->objects, &obj->avl);
+
 	obj->id = 0;
 
 	if (attrbuf[UBUS_ATTR_OBJTYPE] && obj->type)
 		obj->type->id = 0;
-
-	avl_delete(&req->ctx->objects, &obj->avl);
 }
 
 int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
