@@ -31,7 +31,8 @@ ubus_process_unsubscribe(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	if (s->remove_cb)
 		s->remove_cb(ctx, s, blob_get_u32(attrbuf[UBUS_ATTR_TARGET]));
 
-	close(fd);
+	if (fd >= 0)
+		close(fd);
 }
 
 static void
@@ -45,7 +46,8 @@ ubus_process_notify(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	if (obj->subscribe_cb)
 		obj->subscribe_cb(ctx, obj);
 
-	close(fd);
+	if (fd >= 0)
+		close(fd);
 }
 static void
 ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
