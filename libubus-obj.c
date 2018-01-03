@@ -95,7 +95,8 @@ found:
 	ret = obj->methods[method].handler(ctx, obj, &req,
 					   blob_data(attrbuf[UBUS_ATTR_METHOD]),
 					   attrbuf[UBUS_ATTR_DATA]);
-	close(req.req_fd);
+	if (req.req_fd >= 0)
+		close(req.req_fd);
 	if (req.deferred || no_reply)
 		return;
 
