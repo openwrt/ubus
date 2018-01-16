@@ -15,8 +15,9 @@ if not conn then
 end
 
 local sub = {
-	notify = function( msg )
-		print("Count: ", msg["count"])
+	notify = function( msg, name )
+		print("name:", name)
+		print("  count:", msg["count"])
 	end,
 }
 

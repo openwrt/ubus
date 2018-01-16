@@ -787,10 +787,11 @@ ubus_sub_notify_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	if (lua_isfunction(state, -1)) {
 		if( msg ){
 			ubus_lua_parse_blob_array(state, blob_data(msg), blob_len(msg), true);
-			lua_call(state, 1, 0);
 		} else {
-			lua_call(state, 0, 0);
+			lua_pushnil(state);
 		}
+		lua_pushstring(state, method);
+		lua_call(state, 2, 0);
 	} else {
 		lua_pop(state, 1);
 	}
