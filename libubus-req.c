@@ -32,6 +32,9 @@ static void req_data_cb(struct ubus_request *req, int type, struct blob_attr *da
 		return;
 
 	attr = ubus_parse_msg(data);
+	if (!attr[UBUS_ATTR_DATA])
+		return;
+
 	req->data_cb(req, type, attr[UBUS_ATTR_DATA]);
 }
 

@@ -74,7 +74,7 @@ ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 
 	if (attrbuf[UBUS_ATTR_NO_REPLY])
 		no_reply = blob_get_int8(attrbuf[UBUS_ATTR_NO_REPLY]);
-		
+
 	req.peer = hdr->peer;
 	req.seq = hdr->seq;
 	req.object = obj->id;
@@ -94,6 +94,11 @@ ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	goto send;
 
 found:
+	if (!attrbuf[UBUS_ATTR_DATA]) {
+		ret = UBUS_STATUS_INVALID_ARGUMENT;
+		goto send;
+	}
+
 	ret = obj->methods[method].handler(ctx, obj, &req,
 					   blob_data(attrbuf[UBUS_ATTR_METHOD]),
 					   attrbuf[UBUS_ATTR_DATA]);
