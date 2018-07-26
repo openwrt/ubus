@@ -196,6 +196,14 @@ void ubus_complete_deferred_request(struct ubus_context *ctx, struct ubus_reques
 	ubus_send_msg(ctx, req->seq, b.head, UBUS_MSG_STATUS, req->peer, req->fd);
 }
 
+static void ubus_put_data(struct blob_buf *buf, struct blob_attr *msg)
+{
+	if (msg)
+		blob_put(buf, UBUS_ATTR_DATA, blob_data(msg), blob_len(msg));
+	else
+		blob_put(buf, UBUS_ATTR_DATA, NULL, 0);
+}
+
 int ubus_send_reply(struct ubus_context *ctx, struct ubus_request_data *req,
 		    struct blob_attr *msg)
 {
@@ -203,7 +211,7 @@ int ubus_send_reply(struct ubus_context *ctx, struct ubus_request_data *req,
 
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, req->object);
-	blob_put(&b, UBUS_ATTR_DATA, blob_data(msg), blob_len(msg));
+	ubus_put_data(&b, msg);
 	ret = ubus_send_msg(ctx, req->seq, b.head, UBUS_MSG_DATA, req->peer, -1);
 	if (ret < 0)
 		return UBUS_STATUS_NO_DATA;
@@ -218,8 +226,7 @@ int ubus_invoke_async_fd(struct ubus_context *ctx, uint32_t obj,
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, obj);
 	blob_put_string(&b, UBUS_ATTR_METHOD, method);
-	if (msg)
-		blob_put(&b, UBUS_ATTR_DATA, blob_data(msg), blob_len(msg));
+	ubus_put_data(&b, msg);
 
 	memset(req, 0, sizeof(*req));
 	req->fd = fd;
@@ -278,12 +285,10 @@ __ubus_notify_async(struct ubus_context *ctx, struct ubus_object *obj,
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id);
 	blob_put_string(&b, UBUS_ATTR_METHOD, type);
+	ubus_put_data(&b, msg);
 
 	if (!reply)
 		blob_put_int8(&b, UBUS_ATTR_NO_REPLY, true);
-
-	if (msg)
-		blob_put(&b, UBUS_ATTR_DATA, blob_data(msg), blob_len(msg));
 
 	if (ubus_start_request(ctx, &req->req, b.head, UBUS_MSG_NOTIFY, obj->id) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
