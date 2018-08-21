@@ -111,6 +111,17 @@ ubus_lua_parse_blob(lua_State *L, struct blob_attr *attr, bool table)
 		lua_pushnumber(L, (double) be64_to_cpu(*(uint64_t *)data));
 		break;
 
+	case BLOBMSG_TYPE_DOUBLE:
+		{
+			union {
+				double d;
+				uint64_t u64;
+			} v;
+			v.u64 = be64_to_cpu(*(uint64_t *)data);
+			lua_pushnumber(L, v.d);
+		}
+		break;
+
 	case BLOBMSG_TYPE_STRING:
 		lua_pushstring(L, data);
 		break;
@@ -982,6 +993,8 @@ luaopen_ubus(lua_State *L)
 	lua_setfield(L, -2, "INT16");
 	lua_pushinteger(L, BLOBMSG_TYPE_INT8);
 	lua_setfield(L, -2, "INT8");
+	lua_pushinteger(L, BLOBMSG_TYPE_DOUBLE);
+	lua_setfield(L, -2, "DOUBLE");
 	lua_pushinteger(L, BLOBMSG_TYPE_BOOL);
 	lua_setfield(L, -2, "BOOLEAN");
 
