@@ -132,15 +132,6 @@ static void ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *c
 	ubus_msg_send(obj->client, *ub);
 }
 
-static bool strmatch_len(const char *s1, const char *s2, int *len)
-{
-	for (*len = 0; s1[*len] == s2[*len]; (*len)++)
-		if (!s1[*len])
-			return true;
-
-	return false;
-}
-
 int ubusd_send_event(struct ubus_client *cl, const char *id,
 		     event_fill_cb fill_cb, void *cb_priv)
 {
@@ -160,7 +151,7 @@ int ubusd_send_event(struct ubus_client *cl, const char *id,
 		int cur_match_len;
 		bool full_match;
 
-		full_match = strmatch_len(id, key, &cur_match_len);
+		full_match = ubus_strmatch_len(id, key, &cur_match_len);
 		if (cur_match_len < match_len)
 			break;
 

@@ -21,4 +21,13 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
 
+static inline bool ubus_strmatch_len(const char *s1, const char *s2, int *len)
+{
+	for (*len = 0; s1[*len] == s2[*len]; (*len)++)
+		if (!s1[*len])
+			return true;
+
+	return false;
+}
+
 #endif
