@@ -51,6 +51,7 @@ struct ubusd_acl_obj {
 	struct blob_attr *priv;
 	bool subscribe;
 	bool publish;
+	bool listen;
 };
 
 struct ubusd_acl_file {
@@ -129,6 +130,11 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 
 		case UBUS_ACL_SUBSCRIBE:
 			if (acl->subscribe)
+				return 0;
+			break;
+
+		case UBUS_ACL_LISTEN:
+			if (acl->listen)
 				return 0;
 			break;
 
@@ -279,6 +285,13 @@ ubusd_acl_add_publish(struct ubusd_acl_file *file, const char *obj)
 	o->publish = true;
 }
 
+static void ubusd_acl_add_listen(struct ubusd_acl_file *file, const char *obj)
+{
+	struct ubusd_acl_obj *o = ubusd_acl_alloc_obj(file, obj);
+
+	o->listen = true;
+}
+
 enum {
 	ACL_USER,
 	ACL_GROUP,
@@ -286,6 +299,7 @@ enum {
 	ACL_PUBLISH,
 	ACL_SUBSCRIBE,
 	ACL_INHERIT,
+	ACL_LISTEN,
 	__ACL_MAX
 };
 
@@ -296,6 +310,7 @@ static const struct blobmsg_policy acl_policy[__ACL_MAX] = {
 	[ACL_PUBLISH] = { .name = "publish", .type = BLOBMSG_TYPE_ARRAY },
 	[ACL_SUBSCRIBE] = { .name = "subscribe", .type = BLOBMSG_TYPE_ARRAY },
 	[ACL_INHERIT] = { .name = "inherit", .type = BLOBMSG_TYPE_ARRAY },
+	[ACL_LISTEN] = { .name= "listen", .type = BLOBMSG_TYPE_ARRAY },
 };
 
 static void
@@ -327,6 +342,11 @@ ubusd_acl_file_add(struct ubusd_acl_file *file)
 		blobmsg_for_each_attr(cur, tb[ACL_PUBLISH], rem)
 			if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING)
 				ubusd_acl_add_publish(file, blobmsg_get_string(cur));
+
+	if (tb[ACL_LISTEN])
+		blobmsg_for_each_attr(cur, tb[ACL_LISTEN], rem)
+			if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING)
+				ubusd_acl_add_listen(file, blobmsg_get_string(cur));
 }
 
 static void

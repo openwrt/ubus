@@ -18,6 +18,7 @@ enum ubusd_acl_type {
 	UBUS_ACL_PUBLISH,
 	UBUS_ACL_SUBSCRIBE,
 	UBUS_ACL_ACCESS,
+	UBUS_ACL_LISTEN,
 };
 
 int ubusd_acl_check(struct ubus_client *cl, const char *obj, const char *method, enum ubusd_acl_type type);

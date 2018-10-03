@@ -88,6 +88,9 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 		len--;
 	}
 
+	if (pattern[0] && ubusd_acl_check(cl, pattern, NULL, UBUS_ACL_LISTEN))
+		return UBUS_STATUS_PERMISSION_DENIED;
+
 	ev = calloc(1, sizeof(*ev) + len + 1);
 	if (!ev)
 		return UBUS_STATUS_NO_DATA;
