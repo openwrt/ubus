@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2015 John Crispin <blogic@openwrt.org>
+ * Copyright (C) 2018 Hans Dedecker <dedeckeh@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -40,6 +41,8 @@ struct ubusd_acl_obj {
 	struct avl_node avl;
 	struct list_head list;
 
+	bool partial;
+
 	const char *user;
 	const char *group;
 
@@ -69,19 +72,6 @@ static int ubusd_acl_seq;
 static struct ubus_object *acl_obj;
 
 static int
-ubusd_acl_match_path(const void *k1, const void *k2, void *ptr)
-{
-	const char *name = k1;
-	const char *match = k2;
-	char *wildcard = strstr(match, "\t");
-
-	if (wildcard)
-		return strncmp(name, match, wildcard - match);
-
-	return strcmp(name, match);
-}
-
-static int
 ubusd_acl_match_cred(struct ubus_client *cl, struct ubusd_acl_obj *obj)
 {
 	if (obj->user && !strcmp(cl->user, obj->user))
@@ -98,21 +88,35 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 		const char *method, enum ubusd_acl_type type)
 {
 	struct ubusd_acl_obj *acl;
-	struct blob_attr *cur;
-	int rem;
+	int match_len = 0;
 
-	if (!cl->uid || !obj)
+	if (!cl || !cl->uid || !obj)
 		return 0;
 
-	acl = avl_find_ge_element(&ubusd_acls, obj, acl, avl);
-	if (!acl)
-		return -1;
+	/*
+	 * Since this tree is sorted alphabetically, we can only expect
+	 * to find matching entries as long as the number of matching
+	 * characters between the access list string and the object path
+	 * is monotonically increasing.
+	 */
+	avl_for_each_element(&ubusd_acls, acl, avl) {
+		const char *key = acl->avl.key;
+		int cur_match_len;
+		bool full_match;
 
-	avl_for_element_to_last(&ubusd_acls, acl, acl, avl) {
-		int diff = ubusd_acl_match_path(obj, acl->avl.key, NULL);
-
-		if (diff)
+		full_match = ubus_strmatch_len(obj, key, &cur_match_len);
+		if (cur_match_len < match_len)
 			break;
+
+		match_len = cur_match_len;
+
+		if (!full_match) {
+			if (!acl->partial)
+				continue;
+
+			if (match_len != strlen(key))
+				continue;
+		}
 
 		if (ubusd_acl_match_cred(cl, acl))
 			continue;
@@ -129,11 +133,15 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 			break;
 
 		case UBUS_ACL_ACCESS:
-			if (acl->methods)
+			if (acl->methods) {
+				struct blob_attr *cur;
+				int rem;
+
 				blobmsg_for_each_attr(cur, acl->methods, rem)
 					if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING)
-						if (!ubusd_acl_match_path(method, blobmsg_get_string(cur), NULL))
+						if (!strcmp(method, blobmsg_get_string(cur)))
 							return 0;
+			}
 			break;
 		}
 	}
@@ -212,19 +220,20 @@ static struct ubusd_acl_obj*
 ubusd_acl_alloc_obj(struct ubusd_acl_file *file, const char *obj)
 {
 	struct ubusd_acl_obj *o;
+	int len = strlen(obj);
 	char *k;
+	bool partial = false;
 
-	o = calloc_a(sizeof(*o), &k, strlen(obj) + 1);
+	if (obj[len - 1] == '*') {
+		partial = true;
+		len--;
+	}
+
+	o = calloc_a(sizeof(*o), &k, len + 1);
+	o->partial = partial;
 	o->user = file->user;
 	o->group = file->group;
-	o->avl.key = k;
-	strcpy(k, obj);
-
-	while (*k) {
-		if (*k == '*')
-			*k = '\t';
-		k++;
-	}
+	o->avl.key = memcpy(k, obj, len);
 
 	list_add(&o->list, &file->acl);
 	avl_insert(&ubusd_acls, &o->avl);
@@ -420,22 +429,39 @@ static void
 ubusd_reply_add(struct ubus_object *obj)
 {
 	struct ubusd_acl_obj *acl;
+	int match_len = 0;
 
 	if (!obj->path.key)
 		return;
 
-	acl = avl_find_ge_element(&ubusd_acls, obj->path.key, acl, avl);
-	if (!acl)
-		return;
-
-	avl_for_element_to_last(&ubusd_acls, acl, acl, avl) {
+	/*
+	 * Since this tree is sorted alphabetically, we can only expect
+	 * to find matching entries as long as the number of matching
+	 * characters between the access list string and the object path
+	 * is monotonically increasing.
+	 */
+	avl_for_each_element(&ubusd_acls, acl, avl) {
+		const char *key = acl->avl.key;
+		int cur_match_len;
+		bool full_match;
 		void *c;
 
 		if (!acl->priv)
 			continue;
 
-		if (ubusd_acl_match_path(obj->path.key, acl->avl.key, NULL))
-			continue;
+		full_match = ubus_strmatch_len(obj->path.key, key, &cur_match_len);
+		if (cur_match_len < match_len)
+			break;
+
+		match_len = cur_match_len;
+
+		if (!full_match) {
+			if (!acl->partial)
+				continue;
+
+			if (match_len != strlen(key))
+				continue;
+		}
 
 		c = blobmsg_open_table(&b, NULL);
 		blobmsg_add_string(&b, "obj", obj->path.key);
@@ -450,6 +476,7 @@ ubusd_reply_add(struct ubus_object *obj)
 		blobmsg_close_table(&b, c);
 	}
 }
+
 static int ubusd_reply_query(struct ubus_client *cl, struct ubus_msg_buf *ub, struct blob_attr **attr, struct blob_attr *msg)
 {
 	struct ubus_object *obj;
@@ -489,7 +516,7 @@ static int ubusd_acl_recv(struct ubus_client *cl, struct ubus_msg_buf *ub, const
 
 void ubusd_acl_init(void)
 {
-	avl_init(&ubusd_acls, ubusd_acl_match_path, true, NULL);
+	ubus_init_string_tree(&ubusd_acls, true);
 	acl_obj = ubusd_create_object_internal(NULL, UBUS_SYSTEM_OBJECT_ACL);
 	acl_obj->recv_msg = ubusd_acl_recv;
 }
