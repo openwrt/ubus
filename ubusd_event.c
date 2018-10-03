@@ -142,6 +142,9 @@ int ubusd_send_event(struct ubus_client *cl, const char *id,
 	struct event_source *ev;
 	int match_len = 0;
 
+	if (ubusd_acl_check(cl, id, NULL, UBUS_ACL_SEND))
+		return UBUS_STATUS_PERMISSION_DENIED;
+
 	obj_event_seq++;
 
 	/*
