@@ -192,8 +192,6 @@ static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, in
 
 		if (bytes < 0) {
 			bytes = 0;
-			if (uloop_cancelling() || ctx->cancel_poll)
-				return 0;
 			if (errno == EINTR)
 				continue;
 
