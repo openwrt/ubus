@@ -174,9 +174,6 @@ static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, in
 	};
 
 	while (iov->iov_len > 0) {
-		if (wait)
-			wait_data(fd, false);
-
 		if (recv_fd) {
 			msghdr.msg_control = &fd_buf;
 			msghdr.msg_controllen = sizeof(fd_buf);
@@ -210,6 +207,9 @@ static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, in
 		iov->iov_len -= bytes;
 		iov->iov_base += bytes;
 		total += bytes;
+
+		if (iov->iov_len > 0)
+			wait_data(fd, false);
 	}
 
 	return total;
