@@ -109,16 +109,16 @@ static int ubus_msg_writev(int fd, struct ubus_msg_buf *ub, int offset)
 		.msg_control = &fd_buf,
 		.msg_controllen = sizeof(fd_buf),
 	};
+	struct ubus_msghdr hdr;
+	int ret;
 
 	fd_buf.fd = ub->fd;
-	if (ub->fd < 0) {
+	if (ub->fd < 0 || offset) {
 		msghdr.msg_control = NULL;
 		msghdr.msg_controllen = 0;
 	}
 
 	if (offset < sizeof(ub->hdr)) {
-		struct ubus_msghdr hdr;
-
 		hdr.version = ub->hdr.version;
 		hdr.type = ub->hdr.type;
 		hdr.seq = cpu_to_be16(ub->hdr.seq);
@@ -128,12 +128,18 @@ static int ubus_msg_writev(int fd, struct ubus_msg_buf *ub, int offset)
 		iov[0].iov_len = sizeof(hdr) - offset;
 		iov[1].iov_base = (char *) ub->data;
 		iov[1].iov_len = ub->len;
-
-		return sendmsg(fd, &msghdr, 0);
 	} else {
 		offset -= sizeof(ub->hdr);
-		return write(fd, ((char *) ub->data) + offset, ub->len - offset);
+		iov[0].iov_base = ((char *) ub->data) + offset;
+		iov[0].iov_len = ub->len - offset;
+		msghdr.msg_iovlen = 1;
 	}
+
+	do {
+		ret = sendmsg(fd, &msghdr, 0);
+	} while (ret < 0 && errno == EINTR);
+
+	return ret;
 }
 
 static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
