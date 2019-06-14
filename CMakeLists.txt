@@ -14,8 +14,8 @@ ADD_DEFINITIONS( -DUBUS_UNIX_SOCKET="${UBUS_UNIX_SOCKET}")
 ADD_DEFINITIONS( -DUBUS_MAX_MSGLEN=${UBUS_MAX_MSGLEN})
 
 IF(BUILD_STATIC)
-  FIND_LIBRARY(ubox_library NAMES ubox.a)
-  FIND_LIBRARY(blob_library NAMES blobmsg_json.a)
+  FIND_LIBRARY(ubox_library NAMES libubox.a)
+  FIND_LIBRARY(blob_library NAMES libblobmsg_json.a)
 ELSE(BUILD_STATIC)
   FIND_LIBRARY(ubox_library NAMES ubox)
   FIND_LIBRARY(blob_library NAMES blobmsg_json)
@@ -24,7 +24,13 @@ ENDIF(BUILD_STATIC)
 FIND_PATH(ubox_include_dir libubox/usock.h)
 INCLUDE_DIRECTORIES(${ubox_include_dir})
 
-ADD_LIBRARY(ubus SHARED libubus.c libubus-io.c libubus-obj.c libubus-sub.c libubus-req.c libubus-acl.c)
+SET(LIB_SOURCES libubus.c libubus-io.c libubus-obj.c libubus-sub.c libubus-req.c libubus-acl.c)
+
+IF(BUILD_STATIC)
+  ADD_LIBRARY(ubus STATIC ${LIB_SOURCES})
+ELSE(BUILD_STATIC)
+  ADD_LIBRARY(ubus SHARED ${LIB_SOURCES})
+ENDIF(BUILD_STATIC)
 TARGET_LINK_LIBRARIES(ubus ${ubox_library})
 
 find_library(json NAMES json-c json)
@@ -40,6 +46,7 @@ ADD_SUBDIRECTORY(lua)
 ADD_SUBDIRECTORY(examples)
 
 INSTALL(TARGETS ubus cli
+	ARCHIVE DESTINATION lib
 	LIBRARY DESTINATION lib
 	RUNTIME DESTINATION bin
 )
