@@ -14,6 +14,10 @@
 #ifndef __LIBUBUS_H
 #define __LIBUBUS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <libubox/avl.h>
 #include <libubox/list.h>
 #include <libubox/blobmsg.h>
@@ -413,5 +417,9 @@ static inline int ubus_unregister_event_handler(struct ubus_context *ctx,
 {
     return ubus_remove_object(ctx, &ev->obj);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
