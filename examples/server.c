@@ -241,9 +241,6 @@ int main(int argc, char **argv)
 		}
 	}
 
-	argc -= optind;
-	argv += optind;
-
 	uloop_init();
 	signal(SIGPIPE, SIG_IGN);
 

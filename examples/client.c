@@ -220,9 +220,6 @@ int main(int argc, char **argv)
 		}
 	}
 
-	argc -= optind;
-	argv += optind;
-
 	uloop_init();
 
 	ctx = ubus_connect(ubus_socket);
