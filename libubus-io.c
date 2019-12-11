@@ -60,8 +60,8 @@ static void wait_data(int fd, bool write)
 static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 {
 	static struct {
-		struct cmsghdr h;
 		int fd;
+		struct cmsghdr h;
 	} fd_buf = {
 		.h = {
 			.cmsg_len = sizeof(fd_buf),
@@ -159,8 +159,8 @@ static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, in
 	int bytes, total = 0;
 	int fd = ctx->sock.fd;
 	static struct {
-		struct cmsghdr h;
 		int fd;
+		struct cmsghdr h;
 	} fd_buf = {
 		.h = {
 			.cmsg_type = SCM_RIGHTS,

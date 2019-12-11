@@ -96,8 +96,8 @@ static int ubus_msg_writev(int fd, struct ubus_msg_buf *ub, int offset)
 {
 	static struct iovec iov[2];
 	static struct {
-		struct cmsghdr h;
 		int fd;
+		struct cmsghdr h;
 	} fd_buf = {
 		.h = {
 			.cmsg_len = sizeof(fd_buf),
@@ -216,8 +216,8 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 	struct ubus_msg_buf *ub;
 	static struct iovec iov;
 	static struct {
-		struct cmsghdr h;
 		int fd;
+		struct cmsghdr h;
 	} fd_buf = {
 		.h = {
 			.cmsg_type = SCM_RIGHTS,
