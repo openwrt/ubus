@@ -52,11 +52,11 @@ static int
 ubus_lua_parse_blob(lua_State *L, struct blob_attr *attr, bool table);
 
 static int
-ubus_lua_parse_blob_array(lua_State *L, struct blob_attr *attr, int len, bool table)
+ubus_lua_parse_blob_array(lua_State *L, struct blob_attr *attr, size_t len, bool table)
 {
 	int rv;
 	int idx = 1;
-	int rem = len;
+	size_t rem = len;
 	struct blob_attr *pos;
 
 	lua_newtable(L);

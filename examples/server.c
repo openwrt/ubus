@@ -84,7 +84,7 @@ static int test_hello(struct ubus_context *ctx, struct ubus_object *obj,
 {
 	struct hello_request *hreq;
 	struct blob_attr *tb[__HELLO_MAX];
-	const char *format = "%s received a message: %s";
+	const char format[] = "%s received a message: %s";
 	const char *msgstr = "(unknown)";
 
 	blobmsg_parse(hello_policy, ARRAY_SIZE(hello_policy), tb, blob_data(msg), blob_len(msg));
@@ -92,11 +92,12 @@ static int test_hello(struct ubus_context *ctx, struct ubus_object *obj,
 	if (tb[HELLO_MSG])
 		msgstr = blobmsg_data(tb[HELLO_MSG]);
 
-	hreq = calloc(1, sizeof(*hreq) + strlen(format) + strlen(obj->name) + strlen(msgstr) + 1);
+	size_t len = sizeof(*hreq) + sizeof(format) + strlen(obj->name) + strlen(msgstr) + 1;
+	hreq = calloc(1, len);
 	if (!hreq)
 		return UBUS_STATUS_UNKNOWN_ERROR;
 
-	sprintf(hreq->data, format, obj->name, msgstr);
+	snprintf(hreq->data, len, format, obj->name, msgstr);
 	ubus_defer_request(ctx, req, &hreq->req);
 	hreq->timeout.cb = test_hello_reply;
 	uloop_timeout_set(&hreq->timeout, 1000);

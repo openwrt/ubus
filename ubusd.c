@@ -92,7 +92,7 @@ void ubus_msg_free(struct ubus_msg_buf *ub)
 	}
 }
 
-static int ubus_msg_writev(int fd, struct ubus_msg_buf *ub, int offset)
+static ssize_t ubus_msg_writev(int fd, struct ubus_msg_buf *ub, size_t offset)
 {
 	static struct iovec iov[2];
 	static struct {
@@ -112,7 +112,7 @@ static int ubus_msg_writev(int fd, struct ubus_msg_buf *ub, int offset)
 		.msg_controllen = sizeof(fd_buf),
 	};
 	struct ubus_msghdr hdr;
-	int ret;
+	ssize_t ret;
 
 	fd_buf.fd = ub->fd;
 	if (ub->fd < 0 || offset) {
@@ -156,7 +156,7 @@ static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
 /* takes the msgbuf reference */
 void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub)
 {
-	int written;
+	ssize_t written;
 
 	if (ub->hdr.type != UBUS_MSG_MONITOR)
 		ubusd_monitor_message(cl, ub, true);
@@ -167,7 +167,7 @@ void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub)
 		if (written < 0)
 			written = 0;
 
-		if (written >= ub->len + sizeof(ub->hdr))
+		if (written >= (ssize_t) (ub->len + sizeof(ub->hdr)))
 			return;
 
 		cl->txq_ofs = written;
@@ -232,7 +232,7 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 
 	/* first try to tx more pending data */
 	while ((ub = ubus_msg_head(cl))) {
-		int written;
+		ssize_t written;
 
 		written = ubus_msg_writev(sock->fd, ub, cl->txq_ofs);
 		if (written < 0) {
@@ -259,7 +259,7 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 		uloop_fd_add(sock, ULOOP_READ | ULOOP_EDGE_TRIGGER);
 
 retry:
-	if (!sock->eof && cl->pending_msg_offset < sizeof(cl->hdrbuf)) {
+	if (!sock->eof && cl->pending_msg_offset < (int) sizeof(cl->hdrbuf)) {
 		int offset = cl->pending_msg_offset;
 		int bytes;
 
@@ -284,7 +284,7 @@ retry:
 			cl->pending_msg_fd = fd_buf.fd;
 
 		cl->pending_msg_offset += bytes;
-		if (cl->pending_msg_offset < sizeof(cl->hdrbuf))
+		if (cl->pending_msg_offset < (int) sizeof(cl->hdrbuf))
 			goto out;
 
 		if (blob_pad_len(&cl->hdrbuf.data) > UBUS_MAX_MSGLEN)

@@ -55,7 +55,7 @@ static struct ubus_object_type *ubus_create_obj_type(struct blob_attr *sig)
 {
 	struct ubus_object_type *type;
 	struct blob_attr *pos;
-	int rem;
+	size_t rem;
 
 	type = calloc(1, sizeof(*type));
 	if (!type)

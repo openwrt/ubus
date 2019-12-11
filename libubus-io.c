@@ -78,7 +78,7 @@ static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 	int len = 0;
 
 	do {
-		int cur_len;
+		ssize_t cur_len;
 
 		if (sock_fd < 0) {
 			msghdr.msg_control = NULL;
@@ -105,7 +105,7 @@ static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 			sock_fd = -1;
 
 		len += cur_len;
-		while (cur_len >= iov->iov_len) {
+		while (cur_len >= (ssize_t) iov->iov_len) {
 			cur_len -= iov->iov_len;
 			iov_len--;
 			iov++;
@@ -392,7 +392,7 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 		goto out_close;
 
 	memcpy(buf, &hdr.data, sizeof(hdr.data));
-	if (read(ctx->sock.fd, blob_data(buf), blob_len(buf)) != blob_len(buf))
+	if (read(ctx->sock.fd, blob_data(buf), blob_len(buf)) != (ssize_t) blob_len(buf))
 		goto out_free;
 
 	ctx->local_id = hdr.hdr.peer;

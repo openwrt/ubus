@@ -167,7 +167,7 @@ int ubusd_send_event(struct ubus_client *cl, const char *id,
 			if (!ev->partial)
 				continue;
 
-			if (match_len != strlen(key))
+			if (match_len != (int) strlen(key))
 				continue;
 		}
 

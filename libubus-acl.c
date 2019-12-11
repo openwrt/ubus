@@ -102,7 +102,7 @@ static void acl_recv_cb(struct ubus_request *req,
 {
 	struct blob_attr *tb[__ACL_POLICY_MAX];
 	struct blob_attr *cur;
-	int rem;
+	size_t rem;
 
 	if (acl_blob) {
 		struct acl_object *p, *q;

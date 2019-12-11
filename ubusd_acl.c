@@ -116,7 +116,7 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 			if (!acl->partial)
 				continue;
 
-			if (match_len != strlen(key))
+			if (match_len != (int) strlen(key))
 				continue;
 		}
 
@@ -147,7 +147,7 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 		case UBUS_ACL_ACCESS:
 			if (acl->methods) {
 				struct blob_attr *cur;
-				int rem;
+				size_t rem;
 
 				blobmsg_for_each_attr(cur, acl->methods, rem)
 					if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING)
@@ -332,7 +332,7 @@ static void
 ubusd_acl_file_add(struct ubusd_acl_file *file)
 {
 	struct blob_attr *tb[__ACL_MAX], *cur;
-	int rem;
+	size_t rem;
 
 	blobmsg_parse(acl_policy, __ACL_MAX, tb, blob_data(file->blob),
 		      blob_len(file->blob));
@@ -435,7 +435,7 @@ ubusd_acl_load(void)
 {
 	struct stat st;
 	glob_t gl;
-	int j;
+	size_t j;
 	const char *suffix = "/*.json";
 	char *path = alloca(strlen(ubusd_acl_dir) + strlen(suffix) + 1);
 
@@ -499,7 +499,7 @@ ubusd_reply_add(struct ubus_object *obj)
 			if (!acl->partial)
 				continue;
 
-			if (match_len != strlen(key))
+			if (match_len != (int) strlen(key))
 				continue;
 		}
 

@@ -428,7 +428,8 @@ static void ubus_process_notify_status(struct ubus_request *req, int id, struct 
 	struct ubus_notify_request *nreq;
 	struct blob_attr **tb;
 	struct blob_attr *cur;
-	int rem, idx = 1;
+	size_t rem;
+	int idx = 1;
 	int ret = 0;
 
 	nreq = container_of(req, struct ubus_notify_request, req);

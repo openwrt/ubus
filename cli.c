@@ -47,7 +47,7 @@ static const char *format_type(void *priv, struct blob_attr *attr)
 		[BLOBMSG_TYPE_TABLE] = "\"Table\"",
 	};
 	const char *type = NULL;
-	int typeid;
+	size_t typeid;
 
 	if (blob_id(attr) != BLOBMSG_TYPE_INT32)
 		return NULL;
@@ -65,7 +65,7 @@ static void receive_list_result(struct ubus_context *ctx, struct ubus_object_dat
 {
 	struct blob_attr *cur;
 	char *s;
-	int rem;
+	size_t rem;
 
 	if (simple_output || !verbose) {
 		printf("%s\n", obj->path);
@@ -520,7 +520,7 @@ static int ubus_cli_monitor(struct ubus_context *ctx, int argc, char **argv)
 
 static int add_monitor_type(const char *type)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < ARRAY_SIZE(monitor_types); i++) {
 		if (!monitor_types[i] || strcmp(monitor_types[i], type) != 0)
@@ -575,9 +575,10 @@ int main(int argc, char **argv)
 {
 	const char *progname, *ubus_socket = NULL;
 	struct ubus_context *ctx;
-	char *cmd;
 	int ret = 0;
-	int i, ch;
+	char *cmd;
+	size_t i;
+	int ch;
 
 	progname = argv[0];
 
