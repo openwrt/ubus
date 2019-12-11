@@ -30,10 +30,12 @@
 
 #include "ubusd.h"
 
+#define USES_EXTERNAL_BUFFER ~0U
+
 static struct ubus_msg_buf *ubus_msg_ref(struct ubus_msg_buf *ub)
 {
 	struct ubus_msg_buf *new_ub;
-	if (ub->refcount == ~0) {
+	if (ub->refcount == USES_EXTERNAL_BUFFER) {
 		new_ub = ubus_msg_new(ub->data, ub->len, false);
 		if (!new_ub)
 			return NULL;
@@ -61,7 +63,7 @@ struct ubus_msg_buf *ubus_msg_new(void *data, int len, bool shared)
 	ub->fd = -1;
 
 	if (shared) {
-		ub->refcount = ~0;
+		ub->refcount = USES_EXTERNAL_BUFFER;
 		ub->data = data;
 	} else {
 		ub->refcount = 1;
@@ -78,7 +80,7 @@ void ubus_msg_free(struct ubus_msg_buf *ub)
 {
 	switch (ub->refcount) {
 	case 1:
-	case ~0:
+	case USES_EXTERNAL_BUFFER:
 		if (ub->fd >= 0)
 			close(ub->fd);
 
