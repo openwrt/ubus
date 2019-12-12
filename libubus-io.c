@@ -215,7 +215,7 @@ static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, in
 	return total;
 }
 
-static bool ubus_validate_hdr(struct ubus_msghdr *hdr)
+bool ubus_validate_hdr(struct ubus_msghdr *hdr)
 {
 	struct blob_attr *data = (struct blob_attr *) (hdr + 1);
 

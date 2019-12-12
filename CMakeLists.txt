@@ -41,8 +41,9 @@ TARGET_LINK_LIBRARIES(ubus ${ubox_library})
 
 find_library(json NAMES json-c json)
 
-ADD_EXECUTABLE(ubusd ubusd.c ubusd_id.c ubusd_obj.c ubusd_proto.c ubusd_event.c ubusd_acl.c ubusd_monitor.c)
-TARGET_LINK_LIBRARIES(ubusd ${ubox_library} ${blob_library} ${json})
+ADD_LIBRARY(ubusd_library STATIC ubusd.c ubusd_proto.c ubusd_id.c ubusd_obj.c ubusd_event.c ubusd_acl.c ubusd_monitor.c)
+ADD_EXECUTABLE(ubusd ubusd_main.c)
+TARGET_LINK_LIBRARIES(ubusd ubusd_library ${ubox_library} ${blob_library} ${json})
 
 ADD_EXECUTABLE(cli cli.c)
 SET_TARGET_PROPERTIES(cli PROPERTIES OUTPUT_NAME ubus)
