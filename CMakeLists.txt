@@ -41,6 +41,15 @@ TARGET_LINK_LIBRARIES(ubus ${ubox_library})
 
 find_library(json NAMES json-c json)
 
+MACRO(ADD_UNIT_TEST_SAN name output_name)
+  ADD_EXECUTABLE(${name}-san ${name}.c)
+  TARGET_COMPILE_OPTIONS(${name}-san PRIVATE -g -fno-omit-frame-pointer -fsanitize=undefined,address,leak -fno-sanitize-recover=all)
+  TARGET_LINK_OPTIONS(${name}-san PRIVATE -fsanitize=undefined,address,leak)
+  TARGET_LINK_LIBRARIES(${name}-san ubus ubusd_library ${ubox_library} ${blob_library} ${json})
+  TARGET_INCLUDE_DIRECTORIES(${name}-san PRIVATE ${PROJECT_SOURCE_DIR})
+  SET_TARGET_PROPERTIES(${name}-san PROPERTIES OUTPUT_NAME ${output_name})
+ENDMACRO(ADD_UNIT_TEST_SAN)
+
 ADD_LIBRARY(ubusd_library STATIC ubusd.c ubusd_proto.c ubusd_id.c ubusd_obj.c ubusd_event.c ubusd_acl.c ubusd_monitor.c)
 ADD_EXECUTABLE(ubusd ubusd_main.c)
 TARGET_LINK_LIBRARIES(ubusd ubusd_library ${ubox_library} ${blob_library} ${json})
@@ -51,6 +60,13 @@ TARGET_LINK_LIBRARIES(cli ubus ${ubox_library} ${blob_library} ${json})
 
 ADD_SUBDIRECTORY(lua)
 ADD_SUBDIRECTORY(examples)
+
+IF(UNIT_TESTING)
+  ENABLE_TESTING()
+  ADD_SUBDIRECTORY(tests)
+  ADD_UNIT_TEST_SAN(cli ubus-san)
+  ADD_UNIT_TEST_SAN(ubusd_main ubusd-san)
+ENDIF()
 
 INSTALL(TARGETS ubus cli
 	ARCHIVE DESTINATION lib
