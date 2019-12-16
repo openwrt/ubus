@@ -519,12 +519,12 @@ free:
 
 void ubusd_proto_free_client(struct ubus_client *cl)
 {
-	struct ubus_object *obj;
+	struct ubus_object *obj, *tmp;
 
-	while (!list_empty(&cl->objects)) {
-		obj = list_first_entry(&cl->objects, struct ubus_object, list);
+	list_for_each_entry_safe(obj, tmp, &cl->objects, list) {
 		ubusd_free_object(obj);
 	}
+
 	ubus_msg_free(cl->retmsg);
 	blob_buf_free(&cl->b);
 

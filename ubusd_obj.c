@@ -20,13 +20,12 @@ struct avl_tree path;
 
 static void ubus_unref_object_type(struct ubus_object_type *type)
 {
-	struct ubus_method *m;
+	struct ubus_method *m, *tmp;
 
 	if (--type->refcount > 0)
 		return;
 
-	while (!list_empty(&type->methods)) {
-		m = list_first_entry(&type->methods, struct ubus_method, list);
+	list_for_each_entry_safe(m, tmp, &type->methods, list) {
 		list_del(&m->list);
 		free(m);
 	}

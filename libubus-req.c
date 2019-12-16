@@ -40,11 +40,9 @@ static void req_data_cb(struct ubus_request *req, int type, struct blob_attr *da
 
 static void __ubus_process_req_data(struct ubus_request *req)
 {
-	struct ubus_pending_data *data;
+	struct ubus_pending_data *data, *tmp;
 
-	while (!list_empty(&req->pending)) {
-		data = list_first_entry(&req->pending,
-			struct ubus_pending_data, list);
+	list_for_each_entry_safe(data, tmp, &req->pending, list) {
 		list_del(&data->list);
 		if (!req->cancelled)
 			req_data_cb(req, data->type, data->data);

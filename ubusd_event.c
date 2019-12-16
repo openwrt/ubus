@@ -35,10 +35,9 @@ static void ubusd_delete_event_source(struct event_source *evs)
 
 void ubusd_event_cleanup_object(struct ubus_object *obj)
 {
-	struct event_source *ev;
+	struct event_source *ev, *tmp;
 
-	while (!list_empty(&obj->events)) {
-		ev = list_first_entry(&obj->events, struct event_source, list);
+	list_for_each_entry_safe(ev, tmp, &obj->events, list) {
 		ubusd_delete_event_source(ev);
 	}
 }
