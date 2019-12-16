@@ -557,8 +557,7 @@ static int ubus_lua_add(lua_State *L)
 	/* verify top level object */
 	if (lua_istable(L, 1)) {
 		lua_pushstring(L, "you need to pass a table");
-		lua_error(L);
-		return 0;
+		return lua_error(L);
 	}
 
 	/* scan each object */
@@ -598,7 +597,7 @@ ubus_lua_notify( lua_State *L )
 
 	if( !lua_islightuserdata( L, 2 ) ){
 		lua_pushfstring( L, "Invald 2nd parameter, expected ubus obj ref" );
-		lua_error( L );
+		return lua_error( L );
 	}
 	obj = lua_touserdata( L, 2 );
 
@@ -606,7 +605,7 @@ ubus_lua_notify( lua_State *L )
 	blob_buf_init(&c->buf, 0);
 	if( !ubus_lua_format_blob_array( L, &c->buf, true ) ){
 		lua_pushfstring( L, "Invalid 4th parameter, expected table of arguments" );
-		lua_error( L );
+		return lua_error( L );
 	}
 
 	ubus_notify( c->ctx, obj, method, c->buf.head, -1 );
@@ -812,7 +811,7 @@ ubus_sub_notify_handler(struct ubus_context *ctx, struct ubus_object *obj,
 
 
 
-static void
+static int
 ubus_lua_do_subscribe( struct ubus_context *ctx, lua_State *L, const char* target,
                         int idxnotify, int idxremove )
 {
@@ -822,13 +821,13 @@ ubus_lua_do_subscribe( struct ubus_context *ctx, lua_State *L, const char* targe
 
 	if( ( status = ubus_lookup_id( ctx, target, &id ) ) ){
 		lua_pushfstring( L, "Unable find target, status=%d", status );
-		lua_error( L );
+		return lua_error( L );
 	}
 
 	sub = calloc( 1, sizeof( struct ubus_lua_subscriber ) );
 	if( !sub ){
 		lua_pushstring( L, "Out of memory" );
-		lua_error( L );
+		return lua_error( L );
 	}
 
 	if( idxnotify ){
@@ -849,13 +848,15 @@ ubus_lua_do_subscribe( struct ubus_context *ctx, lua_State *L, const char* targe
 
 	if( ( status = ubus_register_subscriber( ctx, &sub->s ) ) ){
 		lua_pushfstring( L, "Failed to register subscriber, status=%d", status );
-		lua_error( L );
+		return lua_error( L );
 	}
 
 	if( ( status = ubus_subscribe( ctx, &sub->s, id) ) ){
 		lua_pushfstring( L, "Failed to register subscriber, status=%d", status );
-		lua_error( L );
+		return lua_error( L );
 	}
+
+	return 0;
 }
 
 static int
