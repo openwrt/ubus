@@ -840,8 +840,8 @@ ubus_lua_do_subscribe( struct ubus_context *ctx, lua_State *L, const char* targe
 
 	if( idxremove ){
 		lua_getglobal(L, "__ubus_cb_subscribe");
-		lua_pushvalue(L, idxnotify);
-		sub->rnotify = luaL_ref(L, -2);
+		lua_pushvalue(L, idxremove);
+		sub->rremove = luaL_ref(L, -2);
 		lua_pop(L, 1);
 		sub->s.remove_cb = ubus_sub_remove_handler;
 	}
