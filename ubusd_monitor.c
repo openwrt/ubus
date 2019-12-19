@@ -29,7 +29,7 @@ ubusd_monitor_free(struct ubus_monitor *m)
 	free(m);
 }
 
-static void
+static bool
 ubusd_monitor_connect(struct ubus_client *cl, struct ubus_msg_buf *ub)
 {
 	struct ubus_monitor *m;
@@ -37,8 +37,28 @@ ubusd_monitor_connect(struct ubus_client *cl, struct ubus_msg_buf *ub)
 	ubusd_monitor_disconnect(cl);
 
 	m = calloc(1, sizeof(*m));
+	if (!m)
+		return false;
+
 	m->cl = cl;
 	list_add(&m->list, &monitors);
+
+	return true;
+}
+
+static struct ubus_monitor*
+ubusd_monitor_find(struct ubus_client *cl)
+{
+	struct ubus_monitor *m, *tmp;
+
+	list_for_each_entry_safe(m, tmp, &monitors, list) {
+		if (m->cl != cl)
+			continue;
+
+		return m;
+	}
+
+	return NULL;
 }
 
 void
@@ -46,13 +66,11 @@ ubusd_monitor_disconnect(struct ubus_client *cl)
 {
 	struct ubus_monitor *m;
 
-	list_for_each_entry(m, &monitors, list) {
-		if (m->cl != cl)
-			continue;
-
-		ubusd_monitor_free(m);
+	m = ubusd_monitor_find(cl);
+	if (!m)
 		return;
-	}
+
+	ubusd_monitor_free(m);
 }
 
 void
@@ -92,13 +110,15 @@ ubusd_monitor_recv(struct ubus_client *cl, struct ubus_msg_buf *ub,
 		return UBUS_STATUS_PERMISSION_DENIED;
 
 	if (!strcmp(method, "add")) {
-		ubusd_monitor_connect(cl, ub);
-		return 0;
+		if (!ubusd_monitor_connect(cl, ub))
+			return UBUS_STATUS_UNKNOWN_ERROR;
+
+		return UBUS_STATUS_OK;
 	}
 
 	if (!strcmp(method, "remove")) {
 		ubusd_monitor_disconnect(cl);
-		return 0;
+		return UBUS_STATUS_OK;
 	}
 
 	return UBUS_STATUS_METHOD_NOT_FOUND;
