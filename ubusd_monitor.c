@@ -41,7 +41,7 @@ ubusd_monitor_connect(struct ubus_client *cl, struct ubus_msg_buf *ub)
 		return false;
 
 	m->cl = cl;
-	list_add(&m->list, &monitors);
+	list_add_tail(&m->list, &monitors);
 
 	return true;
 }
