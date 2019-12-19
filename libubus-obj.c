@@ -121,7 +121,7 @@ void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_
 	struct ubus_object *obj;
 	uint32_t objid;
 	void *prev_data = NULL;
-	attrbuf = ubus_parse_msg(buf->data);
+	attrbuf = ubus_parse_msg(buf->data, blob_raw_len(buf->data));
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
 
@@ -160,7 +160,7 @@ void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_
 static void ubus_add_object_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
 	struct ubus_object *obj = req->priv;
-	struct blob_attr **attrbuf = ubus_parse_msg(msg);
+	struct blob_attr **attrbuf = ubus_parse_msg(msg, blob_raw_len(msg));
 
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
@@ -240,7 +240,7 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
 static void ubus_remove_object_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
 	struct ubus_object *obj = req->priv;
-	struct blob_attr **attrbuf = ubus_parse_msg(msg);
+	struct blob_attr **attrbuf = ubus_parse_msg(msg, blob_raw_len(msg));
 
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;

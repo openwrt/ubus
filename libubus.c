@@ -139,7 +139,7 @@ static void ubus_lookup_cb(struct ubus_request *ureq, int type, struct blob_attr
 	struct blob_attr **attr;
 
 	req = container_of(ureq, struct ubus_lookup_request, req);
-	attr = ubus_parse_msg(msg);
+	attr = ubus_parse_msg(msg, blob_raw_len(msg));
 
 	if (!attr[UBUS_ATTR_OBJID] || !attr[UBUS_ATTR_OBJPATH] ||
 	    !attr[UBUS_ATTR_OBJTYPE])
@@ -175,7 +175,7 @@ static void ubus_lookup_id_cb(struct ubus_request *req, int type, struct blob_at
 	struct blob_attr **attr;
 	uint32_t *id = req->priv;
 
-	attr = ubus_parse_msg(msg);
+	attr = ubus_parse_msg(msg, blob_raw_len(msg));
 
 	if (!attr[UBUS_ATTR_OBJID])
 		return;

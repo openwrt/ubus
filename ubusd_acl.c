@@ -549,7 +549,7 @@ static int ubusd_reply_query(struct ubus_client *cl, struct ubus_msg_buf *ub, st
 static int ubusd_acl_recv(struct ubus_client *cl, struct ubus_msg_buf *ub, const char *method, struct blob_attr *msg)
 {
 	if (!strcmp(method, "query"))
-		return ubusd_reply_query(cl, ub, ubus_parse_msg(ub->data), msg);
+		return ubusd_reply_query(cl, ub, ubus_parse_msg(ub->data, blob_raw_len(ub->data)), msg);
 
 	return UBUS_STATUS_INVALID_COMMAND;
 }

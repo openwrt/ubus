@@ -28,7 +28,7 @@ static void _ubus_parse_msg(const uint8_t *data, size_t size)
 	if (blob_pad_len(attr) > UBUS_MAX_MSGLEN)
 		return;
 
-	ubus_parse_msg(attr);
+	ubus_parse_msg(attr, size);
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)

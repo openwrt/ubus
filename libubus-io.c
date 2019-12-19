@@ -43,9 +43,9 @@ static const struct blob_attr_info ubus_policy[UBUS_ATTR_MAX] = {
 
 static struct blob_attr *attrbuf[UBUS_ATTR_MAX];
 
-__hidden struct blob_attr **ubus_parse_msg(struct blob_attr *msg)
+__hidden struct blob_attr **ubus_parse_msg(struct blob_attr *msg, size_t len)
 {
-	blob_parse(msg, attrbuf, ubus_policy, UBUS_ATTR_MAX);
+	blob_parse_untrusted(msg, len, attrbuf, ubus_policy, UBUS_ATTR_MAX);
 	return attrbuf;
 }
 

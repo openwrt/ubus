@@ -472,7 +472,7 @@ ubus_cli_monitor_cb(struct ubus_context *ctx, uint32_t seq, struct blob_attr *ms
 	bool send;
 	char *data;
 
-	blob_parse(msg, tb, policy, UBUS_MONITOR_MAX);
+	blob_parse_untrusted(msg, blob_raw_len(msg), tb, policy, UBUS_MONITOR_MAX);
 
 	if (!tb[UBUS_MONITOR_CLIENT] ||
 	    !tb[UBUS_MONITOR_PEER] ||

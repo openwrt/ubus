@@ -34,9 +34,9 @@ static const struct blob_attr_info ubus_policy[UBUS_ATTR_MAX] = {
 	[UBUS_ATTR_GROUP] = { .type = BLOB_ATTR_STRING },
 };
 
-struct blob_attr **ubus_parse_msg(struct blob_attr *msg)
+struct blob_attr **ubus_parse_msg(struct blob_attr *msg, size_t len)
 {
-	blob_parse(msg, attrbuf, ubus_policy, UBUS_ATTR_MAX);
+	blob_parse_untrusted(msg, len, attrbuf, ubus_policy, UBUS_ATTR_MAX);
 	return attrbuf;
 }
 
@@ -454,7 +454,7 @@ void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub
 	/* Note: no callback should free the `ub` buffer
 	         that's always done right after the callback finishes */
 	if (cb)
-		ret = cb(cl, ub, ubus_parse_msg(ub->data));
+		ret = cb(cl, ub, ubus_parse_msg(ub->data, blob_raw_len(ub->data)));
 	else
 		ret = UBUS_STATUS_INVALID_COMMAND;
 

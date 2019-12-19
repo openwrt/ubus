@@ -31,7 +31,7 @@ static void req_data_cb(struct ubus_request *req, int type, struct blob_attr *da
 	if (!req->data_cb)
 		return;
 
-	attr = ubus_parse_msg(data);
+	attr = ubus_parse_msg(data, blob_raw_len(data));
 	if (!attr[UBUS_ATTR_DATA])
 		return;
 
@@ -328,7 +328,7 @@ int ubus_notify(struct ubus_context *ctx, struct ubus_object *obj,
 
 static bool ubus_get_status(struct ubus_msghdr_buf *buf, int *ret)
 {
-	struct blob_attr **attrbuf = ubus_parse_msg(buf->data);
+	struct blob_attr **attrbuf = ubus_parse_msg(buf->data, blob_raw_len(buf->data));
 
 	if (!attrbuf[UBUS_ATTR_STATUS])
 		return false;
@@ -435,7 +435,7 @@ static void ubus_process_notify_status(struct ubus_request *req, int id, struct 
 
 	if (!id) {
 		/* first id: ubusd's status message with a list of ids */
-		tb = ubus_parse_msg(buf->data);
+		tb = ubus_parse_msg(buf->data, blob_raw_len(buf->data));
 		if (tb[UBUS_ATTR_SUBSCRIBERS]) {
 			blob_for_each_attr(cur, tb[UBUS_ATTR_SUBSCRIBERS], rem) {
 				if (!blob_check_type(blob_data(cur), blob_len(cur), BLOB_ATTR_INT32))
