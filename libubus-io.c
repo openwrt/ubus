@@ -59,23 +59,24 @@ static void wait_data(int fd, bool write)
 
 static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 {
-	static struct {
-		int fd;
-		struct cmsghdr h;
-	} fd_buf = {
-		.h = {
-			.cmsg_len = sizeof(fd_buf),
-			.cmsg_level = SOL_SOCKET,
-			.cmsg_type = SCM_RIGHTS,
-		}
-	};
-	struct msghdr msghdr = {
-		.msg_iov = iov,
-		.msg_iovlen = iov_len,
-		.msg_control = &fd_buf,
-		.msg_controllen = sizeof(fd_buf),
-	};
+	uint8_t fd_buf[CMSG_SPACE(sizeof(int))] = { 0 };
+	struct msghdr msghdr = { 0 };
+	struct cmsghdr *cmsg;
 	int len = 0;
+	int *pfd;
+
+	msghdr.msg_iov = iov,
+	msghdr.msg_iovlen = iov_len,
+	msghdr.msg_control = fd_buf;
+	msghdr.msg_controllen = sizeof(fd_buf);
+
+	cmsg = CMSG_FIRSTHDR(&msghdr);
+	cmsg->cmsg_type = SCM_RIGHTS;
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+
+	pfd = (int *) CMSG_DATA(cmsg);
+	msghdr.msg_controllen = cmsg->cmsg_len;
 
 	do {
 		ssize_t cur_len;
@@ -84,7 +85,7 @@ static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 			msghdr.msg_control = NULL;
 			msghdr.msg_controllen = 0;
 		} else {
-			fd_buf.fd = sock_fd;
+			*pfd = sock_fd;
 		}
 
 		cur_len = sendmsg(fd, &msghdr, 0);
@@ -156,33 +157,38 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 
 static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, int *recv_fd)
 {
-	int bytes, total = 0;
-	int fd = ctx->sock.fd;
-	static struct {
-		int fd;
-		struct cmsghdr h;
-	} fd_buf = {
-		.h = {
-			.cmsg_type = SCM_RIGHTS,
-			.cmsg_level = SOL_SOCKET,
-			.cmsg_len = sizeof(fd_buf),
-		},
-	};
-	struct msghdr msghdr = {
-		.msg_iov = iov,
-		.msg_iovlen = 1,
-	};
+	uint8_t fd_buf[CMSG_SPACE(sizeof(int))] = { 0 };
+	struct msghdr msghdr = { 0 };
+	struct cmsghdr *cmsg;
+	int total = 0;
+	int bytes;
+	int *pfd;
+	int fd;
+
+	fd = ctx->sock.fd;
+
+	msghdr.msg_iov = iov,
+	msghdr.msg_iovlen = 1,
+	msghdr.msg_control = fd_buf;
+	msghdr.msg_controllen = sizeof(fd_buf);
+
+	cmsg = CMSG_FIRSTHDR(&msghdr);
+	cmsg->cmsg_type = SCM_RIGHTS;
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+
+	pfd = (int *) CMSG_DATA(cmsg);
 
 	while (iov->iov_len > 0) {
 		if (recv_fd) {
-			msghdr.msg_control = &fd_buf;
-			msghdr.msg_controllen = sizeof(fd_buf);
+			msghdr.msg_control = fd_buf;
+			msghdr.msg_controllen = cmsg->cmsg_len;
 		} else {
 			msghdr.msg_control = NULL;
 			msghdr.msg_controllen = 0;
 		}
 
-		fd_buf.fd = -1;
+		*pfd = -1;
 		bytes = recvmsg(fd, &msghdr, 0);
 		if (!bytes)
 			return -1;
@@ -199,7 +205,7 @@ static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, in
 			return 0;
 
 		if (recv_fd)
-			*recv_fd = fd_buf.fd;
+			*recv_fd = *pfd;
 
 		recv_fd = NULL;
 

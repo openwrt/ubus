@@ -82,27 +82,28 @@ void ubus_msg_free(struct ubus_msg_buf *ub)
 
 ssize_t ubus_msg_writev(int fd, struct ubus_msg_buf *ub, size_t offset)
 {
+	uint8_t fd_buf[CMSG_SPACE(sizeof(int))] = { 0 };
 	static struct iovec iov[2];
-	static struct {
-		int fd;
-		struct cmsghdr h;
-	} fd_buf = {
-		.h = {
-			.cmsg_len = sizeof(fd_buf),
-			.cmsg_level = SOL_SOCKET,
-			.cmsg_type = SCM_RIGHTS,
-		},
-	};
-	struct msghdr msghdr = {
-		.msg_iov = iov,
-		.msg_iovlen = ARRAY_SIZE(iov),
-		.msg_control = &fd_buf,
-		.msg_controllen = sizeof(fd_buf),
-	};
+	struct msghdr msghdr = { 0 };
 	struct ubus_msghdr hdr;
+	struct cmsghdr *cmsg;
 	ssize_t ret;
+	int *pfd;
 
-	fd_buf.fd = ub->fd;
+	msghdr.msg_iov = iov;
+	msghdr.msg_iovlen = ARRAY_SIZE(iov);
+	msghdr.msg_control = fd_buf;
+	msghdr.msg_controllen = sizeof(fd_buf);
+
+	cmsg = CMSG_FIRSTHDR(&msghdr);
+	cmsg->cmsg_type = SCM_RIGHTS;
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+
+	pfd = (int *) CMSG_DATA(cmsg);
+	msghdr.msg_controllen = cmsg->cmsg_len;
+
+	*pfd = ub->fd;
 	if (ub->fd < 0 || offset) {
 		msghdr.msg_control = NULL;
 		msghdr.msg_controllen = 0;

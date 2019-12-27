@@ -50,22 +50,25 @@ static void handle_client_disconnect(struct ubus_client *cl)
 static void client_cb(struct uloop_fd *sock, unsigned int events)
 {
 	struct ubus_client *cl = container_of(sock, struct ubus_client, sock);
+	uint8_t fd_buf[CMSG_SPACE(sizeof(int))] = { 0 };
+	struct msghdr msghdr = { 0 };
 	struct ubus_msg_buf *ub;
 	static struct iovec iov;
-	static struct {
-		int fd;
-		struct cmsghdr h;
-	} fd_buf = {
-		.h = {
-			.cmsg_type = SCM_RIGHTS,
-			.cmsg_level = SOL_SOCKET,
-			.cmsg_len = sizeof(fd_buf),
-		}
-	};
-	struct msghdr msghdr = {
-		.msg_iov = &iov,
-		.msg_iovlen = 1,
-	};
+	struct cmsghdr *cmsg;
+	int *pfd;
+
+	msghdr.msg_iov = &iov,
+	msghdr.msg_iovlen = 1,
+	msghdr.msg_control = fd_buf;
+	msghdr.msg_controllen = sizeof(fd_buf);
+
+	cmsg = CMSG_FIRSTHDR(&msghdr);
+	cmsg->cmsg_type = SCM_RIGHTS;
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+
+	pfd = (int *) CMSG_DATA(cmsg);
+	msghdr.msg_controllen = cmsg->cmsg_len;
 
 	/* first try to tx more pending data */
 	while ((ub = ubus_msg_head(cl))) {
@@ -100,14 +103,14 @@ retry:
 		int offset = cl->pending_msg_offset;
 		int bytes;
 
-		fd_buf.fd = -1;
+		*pfd = -1;
 
 		iov.iov_base = ((char *) &cl->hdrbuf) + offset;
 		iov.iov_len = sizeof(cl->hdrbuf) - offset;
 
 		if (cl->pending_msg_fd < 0) {
-			msghdr.msg_control = &fd_buf;
-			msghdr.msg_controllen = sizeof(fd_buf);
+			msghdr.msg_control = fd_buf;
+			msghdr.msg_controllen = cmsg->cmsg_len;
 		} else {
 			msghdr.msg_control = NULL;
 			msghdr.msg_controllen = 0;
@@ -117,8 +120,8 @@ retry:
 		if (bytes < 0)
 			goto out;
 
-		if (fd_buf.fd >= 0)
-			cl->pending_msg_fd = fd_buf.fd;
+		if (*pfd >= 0)
+			cl->pending_msg_fd = *pfd;
 
 		cl->pending_msg_offset += bytes;
 		if (cl->pending_msg_offset < (int) sizeof(cl->hdrbuf))
