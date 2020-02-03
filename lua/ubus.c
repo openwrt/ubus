@@ -196,7 +196,10 @@ ubus_lua_format_blob(lua_State *L, struct blob_buf *b, bool table)
 	case LUA_TINT:
 #endif
 	case LUA_TNUMBER:
-		blobmsg_add_u32(b, key, (uint32_t)lua_tointeger(L, -1));
+		if ((uint64_t)lua_tonumber(L, -1) > INT_MAX)
+			blobmsg_add_u64(b, key, (uint64_t)lua_tonumber(L, -1));
+		else
+			blobmsg_add_u32(b, key, (uint32_t)lua_tointeger(L, -1));
 		break;
 
 	case LUA_TSTRING:
