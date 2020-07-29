@@ -549,6 +549,7 @@ static int usage(const char *prog)
 		"Commands:\n"
 		" - list [<path>]			List objects\n"
 		" - call <path> <method> [<message>]	Call an object method\n"
+		" - subscribe <path> [<path>...]	Subscribe to object(s) notifications\n"
 		" - listen [<path>...]			Listen for events\n"
 		" - send <type> [<message>]		Send an event\n"
 		" - wait_for <object> [<object>...]	Wait for multiple objects to appear on ubus\n"
