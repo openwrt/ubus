@@ -19,6 +19,7 @@ check usage:
   Commands:
    - list [<path>]\t\t\tList objects (esc)
    - call <path> <method> [<message>]\tCall an object method (esc)
+   - subscribe <path> [<path>...]\tSubscribe to object(s) notifications (esc)
    - listen [<path>...]\t\t\tListen for events (esc)
    - send <type> [<message>]\t\tSend an event (esc)
    - wait_for <object> [<object>...]\tWait for multiple objects to appear on ubus (esc)
@@ -40,6 +41,7 @@ check usage:
   Commands:
    - list [<path>]\t\t\tList objects (esc)
    - call <path> <method> [<message>]\tCall an object method (esc)
+   - subscribe <path> [<path>...]\tSubscribe to object(s) notifications (esc)
    - listen [<path>...]\t\t\tListen for events (esc)
    - send <type> [<message>]\t\tSend an event (esc)
    - wait_for <object> [<object>...]\tWait for multiple objects to appear on ubus (esc)
