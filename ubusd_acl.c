@@ -147,12 +147,16 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 		case UBUS_ACL_ACCESS:
 			if (acl->methods) {
 				struct blob_attr *cur;
+				char *cur_method;
 				size_t rem;
 
 				blobmsg_for_each_attr(cur, acl->methods, rem)
-					if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING)
-						if (!strcmp(method, blobmsg_get_string(cur)))
+					if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING) {
+						cur_method = blobmsg_get_string(cur);
+
+						if (!strcmp(method, cur_method) || !strcmp("*", cur_method))
 							return 0;
+					}
 			}
 			break;
 		}
