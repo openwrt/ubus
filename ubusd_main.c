@@ -6,9 +6,11 @@
 
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #ifdef FreeBSD
 #include <sys/param.h>
 #endif
+#include <string.h>
 #include <syslog.h>
 
 #include <libubox/usock.h>
@@ -229,6 +231,19 @@ static void sighup_handler(int sig)
 	ubusd_acl_load();
 }
 
+static void mkdir_sockdir()
+{
+	char *ubus_sock_dir, *tmp;
+
+	ubus_sock_dir = strdup(UBUS_UNIX_SOCKET);
+	tmp = strrchr(ubus_sock_dir, '/');
+	if (tmp) {
+		*tmp = '\0';
+		mkdir(ubus_sock_dir, 0755);
+	}
+	free(ubus_sock_dir);
+}
+
 int main(int argc, char **argv)
 {
 	const char *ubus_socket = UBUS_UNIX_SOCKET;
@@ -254,6 +269,7 @@ int main(int argc, char **argv)
 		}
 	}
 
+	mkdir_sockdir();
 	unlink(ubus_socket);
 	umask(0111);
 	server_fd.fd = usock(USOCK_UNIX | USOCK_SERVER | USOCK_NONBLOCK, ubus_socket, NULL);
