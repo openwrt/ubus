@@ -24,6 +24,7 @@
 #include "ubusd_acl.h"
 
 #define UBUS_OBJ_HASH_BITS	4
+#define UBUS_CLIENT_MAX_TXQ_LEN	UBUS_MAX_MSGLEN
 
 extern struct blob_buf b;
 
@@ -54,6 +55,7 @@ struct ubus_client {
 
 	struct list_head tx_queue;
 	unsigned int txq_ofs;
+	unsigned int txq_len;
 
 	struct ubus_msg_buf *pending_msg;
 	struct ubus_msg_buf *retmsg;

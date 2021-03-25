@@ -74,6 +74,7 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 		}
 
 		cl->txq_ofs += written;
+		cl->txq_len -= written;
 		if (cl->txq_ofs < ub->len + sizeof(ub->hdr))
 			break;
 

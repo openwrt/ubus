@@ -144,6 +144,9 @@ static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
 {
 	struct ubus_msg_buf_list *ubl;
 
+	if (cl->txq_len + ub->len > UBUS_CLIENT_MAX_TXQ_LEN)
+		return;
+
 	ubl = calloc(1, sizeof(struct ubus_msg_buf_list));
 	if (!ubl)
 		return;
@@ -152,6 +155,7 @@ static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
 	ubl->msg = ubus_msg_ref(ub);
 
 	list_add_tail(&cl->tx_queue, &ubl->list);
+	cl->txq_len += ub->len;
 }
 
 /* takes the msgbuf reference */
@@ -172,6 +176,7 @@ void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub)
 			return;
 
 		cl->txq_ofs = written;
+		cl->txq_len = -written;
 
 		/* get an event once we can write to the socket again */
 		uloop_fd_add(&cl->sock, ULOOP_READ | ULOOP_WRITE | ULOOP_EDGE_TRIGGER);
