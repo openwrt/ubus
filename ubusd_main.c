@@ -17,28 +17,11 @@
 
 #include "ubusd.h"
 
-static struct ubus_msg_buf *ubus_msg_head(struct ubus_client *cl)
-{
-	return cl->tx_queue[cl->txq_cur];
-}
-
-static void ubus_msg_dequeue(struct ubus_client *cl)
-{
-	struct ubus_msg_buf *ub = ubus_msg_head(cl);
-
-	if (!ub)
-		return;
-
-	ubus_msg_free(ub);
-	cl->txq_ofs = 0;
-	cl->tx_queue[cl->txq_cur] = NULL;
-	cl->txq_cur = (cl->txq_cur + 1) % ARRAY_SIZE(cl->tx_queue);
-}
-
 static void handle_client_disconnect(struct ubus_client *cl)
 {
-	while (ubus_msg_head(cl))
-		ubus_msg_dequeue(cl);
+	struct ubus_msg_buf_list *ubl, *ubl2;
+	list_for_each_entry_safe(ubl, ubl2, &cl->tx_queue, list)
+		ubus_msg_list_free(ubl);
 
 	ubusd_monitor_disconnect(cl);
 	ubusd_proto_free_client(cl);
@@ -55,6 +38,7 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 	uint8_t fd_buf[CMSG_SPACE(sizeof(int))] = { 0 };
 	struct msghdr msghdr = { 0 };
 	struct ubus_msg_buf *ub;
+	struct ubus_msg_buf_list *ubl, *ubl2;
 	static struct iovec iov;
 	struct cmsghdr *cmsg;
 	int *pfd;
@@ -73,9 +57,10 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 	msghdr.msg_controllen = cmsg->cmsg_len;
 
 	/* first try to tx more pending data */
-	while ((ub = ubus_msg_head(cl))) {
+	list_for_each_entry_safe(ubl, ubl2, &cl->tx_queue, list) {
 		ssize_t written;
 
+		ub = ubl->msg;
 		written = ubus_msg_writev(sock->fd, ub, cl->txq_ofs);
 		if (written < 0) {
 			switch(errno) {
@@ -92,12 +77,12 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 		if (cl->txq_ofs < ub->len + sizeof(ub->hdr))
 			break;
 
-		ubus_msg_dequeue(cl);
+		ubus_msg_list_free(ubl);
 	}
 
 	/* prevent further ULOOP_WRITE events if we don't have data
 	 * to send anymore */
-	if (!ubus_msg_head(cl) && (events & ULOOP_WRITE))
+	if (list_empty(&cl->tx_queue) && (events & ULOOP_WRITE))
 		uloop_fd_add(sock, ULOOP_READ | ULOOP_EDGE_TRIGGER);
 
 retry:
@@ -171,7 +156,7 @@ retry:
 	}
 
 out:
-	if (!sock->eof || ubus_msg_head(cl))
+	if (!sock->eof || !list_empty(&cl->tx_queue))
 		return;
 
 disconnect:

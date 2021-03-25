@@ -495,6 +495,7 @@ struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
 		goto free;
 
 	INIT_LIST_HEAD(&cl->objects);
+	INIT_LIST_HEAD(&cl->tx_queue);
 	cl->sock.fd = fd;
 	cl->sock.cb = cb;
 	cl->pending_msg_fd = -1;
