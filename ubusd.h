@@ -23,7 +23,6 @@
 #include "ubusmsg.h"
 #include "ubusd_acl.h"
 
-#define UBUSD_CLIENT_BACKLOG	32
 #define UBUS_OBJ_HASH_BITS	4
 
 extern struct blob_buf b;
@@ -34,6 +33,11 @@ struct ubus_msg_buf {
 	struct blob_attr *data;
 	int fd;
 	int len;
+};
+
+struct ubus_msg_buf_list {
+	struct list_head list;
+	struct ubus_msg_buf *msg;
 };
 
 struct ubus_client {
@@ -48,8 +52,8 @@ struct ubus_client {
 
 	struct list_head objects;
 
-	struct ubus_msg_buf *tx_queue[UBUSD_CLIENT_BACKLOG];
-	unsigned int txq_cur, txq_tail, txq_ofs;
+	struct list_head tx_queue;
+	unsigned int txq_ofs;
 
 	struct ubus_msg_buf *pending_msg;
 	struct ubus_msg_buf *retmsg;
@@ -72,6 +76,7 @@ struct ubus_msg_buf *ubus_msg_new(void *data, int len, bool shared);
 void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub);
 ssize_t ubus_msg_writev(int fd, struct ubus_msg_buf *ub, size_t offset);
 void ubus_msg_free(struct ubus_msg_buf *ub);
+void ubus_msg_list_free(struct ubus_msg_buf_list *ubl);
 struct blob_attr **ubus_parse_msg(struct blob_attr *msg, size_t len);
 
 struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb);
