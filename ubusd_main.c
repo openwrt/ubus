@@ -115,6 +115,8 @@ retry:
 		if (cl->pending_msg_offset < (int) sizeof(cl->hdrbuf))
 			goto out;
 
+		if (blob_raw_len(&cl->hdrbuf.data) < sizeof(struct blob_attr))
+			goto disconnect;
 		if (blob_pad_len(&cl->hdrbuf.data) > UBUS_MAX_MSGLEN)
 			goto disconnect;
 
