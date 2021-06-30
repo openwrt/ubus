@@ -76,6 +76,7 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 		if (cl->txq_ofs < ub->len + sizeof(ub->hdr))
 			break;
 
+		cl->txq_ofs = 0;
 		ubus_msg_list_free(ubl);
 	}
 
