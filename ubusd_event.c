@@ -63,6 +63,9 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 	bool partial = false;
 	int len;
 
+	if (!msg)
+		return UBUS_STATUS_INVALID_ARGUMENT;
+
 	blobmsg_parse(evr_policy, EVREG_LAST, attr, blob_data(msg), blob_len(msg));
 	if (!attr[EVREG_OBJECT] || !attr[EVREG_PATTERN])
 		return UBUS_STATUS_INVALID_ARGUMENT;
@@ -208,6 +211,9 @@ static int ubusd_forward_event(struct ubus_client *cl, struct blob_attr *msg)
 	struct blob_attr *data;
 	struct blob_attr *attr[EVMSG_LAST];
 	const char *id;
+
+	if (!msg)
+		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	blobmsg_parse(ev_policy, EVMSG_LAST, attr, blob_data(msg), blob_len(msg));
 	if (!attr[EVMSG_ID] || !attr[EVMSG_DATA])
