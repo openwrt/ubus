@@ -103,7 +103,9 @@ ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd)
 			break;
 		}
 
+		ctx->stack_depth++;
 		ubus_process_obj_msg(ctx, buf, fd);
+		ctx->stack_depth--;
 		break;
 	case UBUS_MSG_MONITOR:
 		if (ctx->monitor_cb)
