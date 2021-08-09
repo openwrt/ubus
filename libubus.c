@@ -115,12 +115,13 @@ ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd)
 static void ubus_process_pending_msg(struct uloop_timeout *timeout)
 {
 	struct ubus_context *ctx = container_of(timeout, struct ubus_context, pending_timer);
-	struct ubus_pending_msg *pending, *tmp;
+	struct ubus_pending_msg *pending;
 
-	list_for_each_entry_safe(pending, tmp, &ctx->pending, list) {
+	while (!list_empty(&ctx->pending)) {
 		if (ctx->stack_depth)
 			break;
 
+		pending = list_first_entry(&ctx->pending, struct ubus_pending_msg, list);
 		list_del(&pending->list);
 		ubus_process_msg(ctx, &pending->hdr, -1);
 		free(pending);
