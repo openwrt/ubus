@@ -314,11 +314,19 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 	struct ubus_context *ctx = container_of(u, struct ubus_context, sock);
 	int recv_fd = -1;
 
-	while (get_next_msg(ctx, &recv_fd)) {
+	while (1) {
+		if (!ctx->stack_depth)
+			ctx->pending_timer.cb(&ctx->pending_timer);
+
+		if (!get_next_msg(ctx, &recv_fd))
+			break;
 		ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
 		if (uloop_cancelling() || ctx->cancel_poll)
 			break;
 	}
+
+	if (!ctx->stack_depth)
+		ctx->pending_timer.cb(&ctx->pending_timer);
 
 	if (u->eof)
 		ctx->connection_lost(ctx);
