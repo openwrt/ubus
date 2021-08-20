@@ -26,6 +26,7 @@
 #include <libubox/vlist.h>
 #include <libubox/blobmsg_json.h>
 #include <libubox/avl-cmp.h>
+#include <libubox/ulog.h>
 
 #include "ubusd.h"
 
@@ -175,19 +176,25 @@ ubusd_acl_init_client(struct ubus_client *cl, int fd)
 #ifdef SO_PEERCRED
 	unsigned int len = sizeof(struct ucred);
 
-	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) == -1)
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) == -1) {
+		ULOG_ERR("Failed getsockopt(): %m\n");
 		return -1;
+	}
 #else
 	memset(&cred, 0, sizeof(cred));
 #endif
 
 	pwd = getpwuid(cred.uid);
-	if (!pwd)
+	if (!pwd) {
+		ULOG_ERR("Failed getpwuid(): %m\n");
 		return -1;
+	}
 
 	group = getgrgid(cred.gid);
-	if (!group)
+	if (!group) {
+		ULOG_ERR("Failed getgrgid(): %m\n");
 		return -1;
+	}
 
 	cl->uid = cred.uid;
 	cl->gid = cred.gid;

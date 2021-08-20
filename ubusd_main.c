@@ -233,6 +233,8 @@ static void mkdir_sockdir()
 	free(ubus_sock_dir);
 }
 
+#include <libubox/ulog.h>
+
 int main(int argc, char **argv)
 {
 	const char *ubus_socket = UBUS_UNIX_SOCKET;
@@ -242,6 +244,7 @@ int main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 	signal(SIGHUP, sighup_handler);
 
+	ulog_open(ULOG_KMSG | ULOG_SYSLOG, LOG_DAEMON, "ubusd");
 	openlog("ubusd", LOG_PID, LOG_DAEMON);
 	uloop_init();
 
