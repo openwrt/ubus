@@ -119,6 +119,23 @@ static void receive_event(struct ubus_context *ctx, struct ubus_event_handler *e
 	print_event(type, msg);
 }
 
+static int ubus_cli_error(char *cmd, int argc, char **argv, int err)
+{
+       int i;
+
+       if (!simple_output && !isatty(fileno(stderr))) {
+	       fprintf(stderr, "Command failed: ubus %s ", cmd);
+	       for (i = 0; i < argc; i++) {
+		       fprintf(stderr, "%s ", argv[i]);
+	       }
+	       fprintf(stderr, "(%s)\n", ubus_strerror(err));
+
+	       return -err;
+       }
+
+       return err;
+}
+
 static int ubus_cli_list(struct ubus_context *ctx, int argc, char **argv)
 {
 	const char *path = NULL;
@@ -142,14 +159,18 @@ static int ubus_cli_call(struct ubus_context *ctx, int argc, char **argv)
 
 	blob_buf_init(&b, 0);
 	if (argc == 3 && !blobmsg_add_json_from_string(&b, argv[2])) {
-		return UBUS_STATUS_PARSE_ERROR;
+		return ubus_cli_error("call", argc, argv, UBUS_STATUS_PARSE_ERROR);
 	}
 
 	ret = ubus_lookup_id(ctx, argv[0], &id);
 	if (ret)
 		return ret;
 
-	return ubus_invoke(ctx, id, argv[1], b.head, receive_call_result_data, NULL, timeout * 1000);
+	ret = ubus_invoke(ctx, id, argv[1], b.head, receive_call_result_data, NULL, timeout * 1000);
+	if (ret)
+		return ubus_cli_error("call", argc, argv, ret);
+
+	return ret;
 }
 
 struct cli_listen_data {
