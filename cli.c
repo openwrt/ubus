@@ -142,9 +142,7 @@ static int ubus_cli_call(struct ubus_context *ctx, int argc, char **argv)
 
 	blob_buf_init(&b, 0);
 	if (argc == 3 && !blobmsg_add_json_from_string(&b, argv[2])) {
-		if (!simple_output)
-			fprintf(stderr, "Failed to parse message data\n");
-		return -1;
+		return UBUS_STATUS_PARSE_ERROR;
 	}
 
 	ret = ubus_lookup_id(ctx, argv[0], &id);
@@ -268,9 +266,7 @@ static int ubus_cli_send(struct ubus_context *ctx, int argc, char **argv)
 	blob_buf_init(&b, 0);
 
 	if (argc == 2 && !blobmsg_add_json_from_string(&b, argv[1])) {
-		if (!simple_output)
-			fprintf(stderr, "Failed to parse message data\n");
-		return -1;
+		return UBUS_STATUS_PARSE_ERROR;
 	}
 
 	return ubus_send_event(ctx, argv[0], b.head);
