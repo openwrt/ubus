@@ -34,6 +34,9 @@ const char *__ubus_strerror[__UBUS_STATUS_LAST] = {
 	[UBUS_STATUS_NOT_SUPPORTED] = "Operation not supported",
 	[UBUS_STATUS_UNKNOWN_ERROR] = "Unknown error",
 	[UBUS_STATUS_CONNECTION_FAILED] = "Connection failed",
+	[UBUS_STATUS_NO_MEMORY] = "Out of memory",
+	[UBUS_STATUS_PARSE_ERROR] = "Parsing message data failed",
+	[UBUS_STATUS_SYSTEM_ERROR] = "System error",
 };
 
 struct blob_buf b __hidden = {};
