@@ -286,9 +286,10 @@ ubus_lua_objects(lua_State *L)
 {
 	int rv;
 	struct ubus_lua_connection *c = luaL_checkudata(L, 1, METANAME);
+	const char *path = (lua_gettop(L) >= 2) ? luaL_checkstring(L, 2) : NULL;
 
 	lua_newtable(L);
-	rv = ubus_lookup(c->ctx, NULL, ubus_lua_objects_cb, L);
+	rv = ubus_lookup(c->ctx, path, ubus_lua_objects_cb, L);
 
 	if (rv != UBUS_STATUS_OK)
 	{
