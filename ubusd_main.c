@@ -32,6 +32,28 @@ static void handle_client_disconnect(struct ubus_client *cl)
 	free(cl);
 }
 
+static void ubus_client_cmd_free(struct ubus_client_cmd *cmd)
+{
+	list_del(&cmd->list);
+	ubus_msg_free(cmd->msg);
+	free(cmd);
+}
+
+static void ubus_client_cmd_queue_process(struct ubus_client *cl)
+{
+	struct ubus_client_cmd *cmd, *tmp;
+
+	list_for_each_entry_safe(cmd, tmp, &cl->cmd_queue, list) {
+		int ret = ubusd_cmd_lookup(cl, cmd);
+
+		/* Stop if the last command caused buffering again */
+		if (ret == -2)
+			break;
+
+		ubus_client_cmd_free(cmd);
+	}
+}
+
 static void client_cb(struct uloop_fd *sock, unsigned int events)
 {
 	struct ubus_client *cl = container_of(sock, struct ubus_client, sock);
@@ -82,10 +104,15 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 		ubus_msg_list_free(ubl);
 	}
 
-	/* prevent further ULOOP_WRITE events if we don't have data
-	 * to send anymore */
-	if (list_empty(&cl->tx_queue) && (events & ULOOP_WRITE))
-		uloop_fd_add(sock, ULOOP_READ | ULOOP_EDGE_TRIGGER);
+	if (list_empty(&cl->tx_queue) && (events & ULOOP_WRITE)) {
+		/* Process queued commands */
+		ubus_client_cmd_queue_process(cl);
+
+		/* prevent further ULOOP_WRITE events if we don't have data
+		 * to send anymore */
+		if (list_empty(&cl->tx_queue))
+			uloop_fd_add(sock, ULOOP_READ | ULOOP_EDGE_TRIGGER);
+	}
 
 retry:
 	if (!sock->eof && cl->pending_msg_offset < (int) sizeof(cl->hdrbuf)) {

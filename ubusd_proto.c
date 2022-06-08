@@ -186,16 +186,56 @@ static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, stru
 		ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
 }
 
-static int ubusd_handle_lookup(struct ubus_client *cl, struct ubus_msg_buf *ub, struct blob_attr **attr)
+static int ubus_client_cmd_queue_add(struct ubus_client *cl,
+					struct ubus_msg_buf *msg,
+					struct ubus_object *obj)
 {
-	struct ubus_object *obj;
+	struct ubus_client_cmd *cmd = malloc(sizeof(*cmd));
+
+	if (cmd) {
+		cmd->msg = msg;
+		cmd->obj = obj;
+		list_add_tail(&cmd->list, &cl->cmd_queue);
+		return -2;
+	}
+	return UBUS_STATUS_UNKNOWN_ERROR;
+}
+
+static int __ubusd_handle_lookup(struct ubus_client *cl,
+				struct ubus_msg_buf *ub,
+				struct blob_attr **attr,
+				struct ubus_client_cmd *cmd)
+{
+	struct ubus_object *obj = NULL;
 	char *objpath;
 	bool found = false;
 	int len;
 
 	if (!attr[UBUS_ATTR_OBJPATH]) {
-		avl_for_each_element(&path, obj, path)
-			ubusd_send_obj(cl, ub, obj);
+		if (cmd)
+			obj = cmd->obj;
+
+		/* Start from beginning or continue from the last object */
+		if (obj == NULL)
+			obj = avl_first_element(&path, obj, path);
+
+		avl_for_element_range(obj, avl_last_element(&path, obj, path), obj, path) {
+			/* Keep sending objects until buffering starts */
+			if (list_empty(&cl->tx_queue)) {
+				ubusd_send_obj(cl, ub, obj);
+			} else {
+				/* Queue command and continue on the next call */
+				int ret;
+
+				if (cmd == NULL) {
+					ret = ubus_client_cmd_queue_add(cl, ub, obj);
+				} else {
+					cmd->obj = obj;
+					ret = -2;
+				}
+				return ret;
+			}
+		}
 		return 0;
 	}
 
@@ -228,6 +268,40 @@ static int ubusd_handle_lookup(struct ubus_client *cl, struct ubus_msg_buf *ub, 
 		return UBUS_STATUS_NOT_FOUND;
 
 	return 0;
+}
+
+static int ubusd_handle_lookup(struct ubus_client *cl, struct ubus_msg_buf *ub, struct blob_attr **attr)
+{
+	int rc;
+
+	if (list_empty(&cl->tx_queue))
+		rc = __ubusd_handle_lookup(cl, ub, attr, NULL);
+	else
+		rc = ubus_client_cmd_queue_add(cl, ub, NULL);
+
+	return rc;
+}
+
+int ubusd_cmd_lookup(struct ubus_client *cl, struct ubus_client_cmd *cmd)
+{
+	struct ubus_msg_buf *ub = cmd->msg;
+	struct blob_attr **attr;
+	int ret;
+
+	attr = ubus_parse_msg(ub->data, blob_raw_len(ub->data));
+	ret = __ubusd_handle_lookup(cl, ub, attr, cmd);
+
+	if (ret != -2) {
+		struct ubus_msg_buf *retmsg = cl->retmsg;
+		int *retmsg_data = blob_data(blob_data(retmsg->data));
+
+		retmsg->hdr.seq = ub->hdr.seq;
+		retmsg->hdr.peer = ub->hdr.peer;
+
+		*retmsg_data = htonl(ret);
+		ubus_msg_send(cl, retmsg);
+	}
+	return ret;
 }
 
 static void
@@ -458,6 +532,10 @@ void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub
 	else
 		ret = UBUS_STATUS_INVALID_COMMAND;
 
+	/* Command has not been completed yet and got queued */
+	if (ret == -2)
+		return;
+
 	ubus_msg_free(ub);
 
 	if (ret == -1)
@@ -495,6 +573,7 @@ struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
 		goto free;
 
 	INIT_LIST_HEAD(&cl->objects);
+	INIT_LIST_HEAD(&cl->cmd_queue);
 	INIT_LIST_HEAD(&cl->tx_queue);
 	cl->sock.fd = fd;
 	cl->sock.cb = cb;

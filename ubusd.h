@@ -41,6 +41,12 @@ struct ubus_msg_buf_list {
 	struct ubus_msg_buf *msg;
 };
 
+struct ubus_client_cmd {
+	struct list_head list;
+	struct ubus_msg_buf *msg;
+	struct ubus_object *obj;
+};
+
 struct ubus_client {
 	struct ubus_id id;
 	struct uloop_fd sock;
@@ -53,6 +59,7 @@ struct ubus_client {
 
 	struct list_head objects;
 
+	struct list_head cmd_queue;
 	struct list_head tx_queue;
 	unsigned int txq_ofs;
 	unsigned int txq_len;
@@ -86,6 +93,7 @@ void ubusd_proto_receive_message(struct ubus_client *cl, struct ubus_msg_buf *ub
 void ubusd_proto_free_client(struct ubus_client *cl);
 void ubus_proto_send_msg_from_blob(struct ubus_client *cl, struct ubus_msg_buf *ub,
 				   uint8_t type);
+int ubusd_cmd_lookup(struct ubus_client *cl, struct ubus_client_cmd *cmd);
 
 typedef struct ubus_msg_buf *(*event_fill_cb)(void *priv, const char *id);
 void ubusd_event_init(void);
