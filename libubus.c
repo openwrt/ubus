@@ -368,6 +368,7 @@ void ubus_shutdown(struct ubus_context *ctx)
 	blob_buf_free(&b);
 	if (!ctx)
 		return;
+	uloop_fd_delete(&ctx->sock);
 	close(ctx->sock.fd);
 	uloop_timeout_cancel(&ctx->pending_timer);
 	free(ctx->msgbuf.data);
