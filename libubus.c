@@ -298,6 +298,7 @@ int ubus_connect_ctx(struct ubus_context *ctx, const char *path)
 
 	INIT_LIST_HEAD(&ctx->requests);
 	INIT_LIST_HEAD(&ctx->pending);
+	INIT_LIST_HEAD(&ctx->auto_subscribers);
 	avl_init(&ctx->objects, ubus_cmp_id, false, NULL);
 	if (ubus_reconnect(ctx, path)) {
 		free(ctx->msgbuf.data);

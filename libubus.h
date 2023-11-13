@@ -63,6 +63,7 @@ typedef void (*ubus_notify_complete_handler_t)(struct ubus_notify_request *req,
 typedef void (*ubus_notify_data_handler_t)(struct ubus_notify_request *req,
 					   int type, struct blob_attr *msg);
 typedef void (*ubus_connect_handler_t)(struct ubus_context *ctx);
+typedef bool (*ubus_new_object_handler_t)(struct ubus_context *ctx, struct ubus_subscriber *sub, const char *path);
 
 #define UBUS_OBJECT_TYPE(_name, _methods)		\
 	{						\
@@ -139,10 +140,12 @@ struct ubus_object {
 };
 
 struct ubus_subscriber {
+	struct list_head list;
 	struct ubus_object obj;
 
 	ubus_handler_t cb;
 	ubus_remove_handler_t remove_cb;
+	ubus_new_object_handler_t new_obj_cb;
 };
 
 struct ubus_event_handler {
@@ -170,6 +173,9 @@ struct ubus_context {
 	struct ubus_msghdr_buf msgbuf;
 	uint32_t msgbuf_data_len;
 	int msgbuf_reduction_counter;
+
+	struct list_head auto_subscribers;
+	struct ubus_event_handler auto_subscribe_event_handler;
 };
 
 struct ubus_object_data {
@@ -302,6 +308,8 @@ int ubus_register_subscriber(struct ubus_context *ctx, struct ubus_subscriber *o
 static inline int
 ubus_unregister_subscriber(struct ubus_context *ctx, struct ubus_subscriber *obj)
 {
+	if (!list_empty(&obj->list))
+		list_del_init(&obj->list);
 	return ubus_remove_object(ctx, &obj->obj);
 }
 
