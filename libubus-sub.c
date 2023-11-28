@@ -77,10 +77,15 @@ ubus_auto_sub_lookup(struct ubus_context *ctx, struct ubus_object_data *obj,
 int ubus_register_subscriber(struct ubus_context *ctx, struct ubus_subscriber *s)
 {
 	struct ubus_object *obj = &s->obj;
+	int ret;
 
 	INIT_LIST_HEAD(&s->list);
 	obj->methods = &watch_method;
 	obj->n_methods = 1;
+
+	ret = ubus_add_object(ctx, obj);
+	if (ret)
+		return ret;
 
 	if (s->new_obj_cb) {
 		struct ubus_event_handler *ev = &ctx->auto_subscribe_event_handler;
@@ -91,7 +96,7 @@ int ubus_register_subscriber(struct ubus_context *ctx, struct ubus_subscriber *s
 		ubus_lookup(ctx, NULL, ubus_auto_sub_lookup, s);
 	}
 
-	return ubus_add_object(ctx, obj);
+	return 0;
 }
 
 static int
