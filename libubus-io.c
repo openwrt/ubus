@@ -345,6 +345,29 @@ void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)
 }
 
 static void
+ubus_auto_sub_lookup(struct ubus_context *ctx, struct ubus_object_data *obj,
+		     void *priv)
+{
+	struct ubus_subscriber *s;
+
+	list_for_each_entry(s, &ctx->auto_subscribers, list)
+		if (s->new_obj_cb(ctx, s, obj->path))
+			ubus_subscribe(ctx, s, obj->id);
+}
+
+static void
+ubus_refresh_auto_subscribe(struct ubus_context *ctx)
+{
+	struct ubus_event_handler *ev = &ctx->auto_subscribe_event_handler;
+
+	if (list_empty(&ctx->auto_subscribers))
+		return;
+
+	ubus_register_event_handler(ctx, ev, "ubus.object.add");
+	ubus_lookup(ctx, NULL, ubus_auto_sub_lookup, NULL);
+}
+
+static void
 ubus_refresh_state(struct ubus_context *ctx)
 {
 	struct ubus_object *obj, *tmp;
@@ -365,6 +388,8 @@ ubus_refresh_state(struct ubus_context *ctx)
 
 	for (n = i, i = 0; i < n; i++)
 		ubus_add_object(ctx, objs[i]);
+
+	ubus_refresh_auto_subscribe(ctx);
 }
 
 int ubus_reconnect(struct ubus_context *ctx, const char *path)
