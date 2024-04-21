@@ -311,6 +311,8 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 
 void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 {
+	(void) events;
+
 	struct ubus_context *ctx = container_of(u, struct ubus_context, sock);
 	int recv_fd = -1;
 
