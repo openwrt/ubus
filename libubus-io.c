@@ -334,7 +334,19 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 		ctx->connection_lost(ctx);
 }
 
-void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)
+static void ubus_handle_single_datum(struct ubus_context *ctx)
+{
+	int recv_fd = -1;
+
+	if (!get_next_msg(ctx, &recv_fd))
+		return;
+
+	ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
+
+	// TODO register pending_timer?
+}
+
+void __hidden ubus_poll_single_datum(struct ubus_context *ctx, int timeout)
 {
 	struct pollfd pfd = {
 		.fd = ctx->sock.fd,
@@ -343,7 +355,7 @@ void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)
 
 	ctx->cancel_poll = false;
 	poll(&pfd, 1, timeout ? timeout : -1);
-	ubus_handle_data(&ctx->sock, ULOOP_READ);
+	ubus_handle_single_datum(ctx);
 }
 
 static void

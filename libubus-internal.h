@@ -29,7 +29,7 @@ int __hidden __ubus_start_request(struct ubus_context *ctx, struct ubus_request 
 				struct blob_attr *msg, int cmd, uint32_t peer);
 void ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
 void ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
-void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout);
+void __hidden ubus_poll_single_datum(struct ubus_context *ctx, int timeout);
 
 
 #endif
