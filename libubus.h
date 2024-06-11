@@ -69,41 +69,44 @@ typedef bool (*ubus_new_object_handler_t)(struct ubus_context *ctx, struct ubus_
 	{						\
 		.name = _name,				\
 		.id = 0,				\
-		.n_methods = ARRAY_SIZE(_methods),	\
-		.methods = _methods			\
+		.methods = _methods,			\
+		.n_methods = ARRAY_SIZE(_methods)	\
 	}
 
-#define __UBUS_METHOD_NOARG(_name, _handler, _tags)	\
-	.name = _name,					\
-	.handler = _handler,				\
+#define __UBUS_METHOD_BASE(_name, _handler, _mask, _tags)	\
+	.name = _name,						\
+	.handler = _handler,					\
+	.mask = _mask,						\
 	.tags = _tags
 
-#define __UBUS_METHOD(_name, _handler, _policy, _tags)	\
-	__UBUS_METHOD_NOARG(_name, _handler, _tags),	\
-	.policy = _policy,				\
+#define __UBUS_METHOD_NOARG(_name, _handler, _mask, _tags)	\
+	__UBUS_METHOD_BASE(_name, _handler, _mask, _tags),	\
+	.policy = NULL,						\
+	.n_policy = 0
+
+#define __UBUS_METHOD(_name, _handler, _mask, _policy, _tags)	\
+	__UBUS_METHOD_BASE(_name, _handler, _mask, _tags),	\
+	.policy = _policy,					\
 	.n_policy = ARRAY_SIZE(_policy)
 
 #define UBUS_METHOD(_name, _handler, _policy)		\
-	{ __UBUS_METHOD(_name, _handler, _policy, 0) }
+	{ __UBUS_METHOD(_name, _handler, 0, _policy, 0) }
 
 #define UBUS_METHOD_TAG(_name, _handler, _policy, _tags)\
-	{ __UBUS_METHOD(_name, _handler, _policy, _tags) }
+	{ __UBUS_METHOD(_name, _handler, 0, _policy, _tags) }
 
 #define UBUS_METHOD_MASK(_name, _handler, _policy, _mask) \
-	{						\
-		__UBUS_METHOD(_name, _handler, _policy, 0),\
-		.mask = _mask				\
-	}
+	{ __UBUS_METHOD(_name, _handler, _mask, _policy, 0) }
 
 #define UBUS_METHOD_NOARG(_name, _handler)		\
-	{ __UBUS_METHOD_NOARG(_name, _handler, 0) }
+	{ __UBUS_METHOD_NOARG(_name, _handler, 0, 0) }
 
 #define UBUS_METHOD_TAG_NOARG(_name, _handler, _tags)	\
-	{ __UBUS_METHOD_NOARG(_name, _handler, _tags) }
+	{ __UBUS_METHOD_NOARG(_name, _handler, 0, _tags) }
 
-#define UBUS_TAG_STATUS		BIT(0)
-#define UBUS_TAG_ADMIN		BIT(1)
-#define UBUS_TAG_PRIVATE	BIT(2)
+#define UBUS_TAG_STATUS		(1ul << 0)
+#define UBUS_TAG_ADMIN		(1ul << 1)
+#define UBUS_TAG_PRIVATE	(1ul << 2)
 
 struct ubus_method {
 	const char *name;
