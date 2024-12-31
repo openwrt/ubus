@@ -177,8 +177,15 @@ struct ubus_context {
 	uint32_t msgbuf_data_len;
 	int msgbuf_reduction_counter;
 
-	struct list_head auto_subscribers;
-	struct ubus_event_handler auto_subscribe_event_handler;
+	union {
+		struct {
+			struct list_head auto_subscribers;
+			struct ubus_event_handler auto_subscribe_event_handler;
+		};
+		struct {
+			ubus_handler_t request_handler;
+		};
+	};
 };
 
 struct ubus_object_data {
@@ -253,6 +260,16 @@ struct ubus_context *ubus_connect(const char *path);
 int ubus_connect_ctx(struct ubus_context *ctx, const char *path);
 void ubus_auto_connect(struct ubus_auto_conn *conn);
 int ubus_reconnect(struct ubus_context *ctx, const char *path);
+int ubus_channel_connect(struct ubus_context *ctx, int fd,
+			 ubus_handler_t handler);
+int ubus_channel_create(struct ubus_context *ctx, int *remote_fd,
+			ubus_handler_t handler);
+
+static inline bool
+ubus_context_is_channel(struct ubus_context *ctx)
+{
+    return ctx->local_id == UBUS_CLIENT_ID_CHANNEL;
+}
 
 /* call this only for struct ubus_context pointers returned by ubus_connect() */
 void ubus_free(struct ubus_context *ctx);
