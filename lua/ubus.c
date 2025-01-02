@@ -588,6 +588,54 @@ static int ubus_lua_add(lua_State *L)
 	return 0;
 }
 
+static int ubus_lua_remove(lua_State *L)
+{
+	struct ubus_lua_connection *c = NULL;
+	struct ubus_object *obj = NULL;
+	struct ubus_lua_object *lua_obj = NULL;
+
+	c = luaL_checkudata(L, 1, METANAME);
+
+	luaL_checktype(L, 2, LUA_TTABLE);
+
+	lua_pushstring(L, "__ubusobj");
+	if (lua_gettable(L, -2) != LUA_TLIGHTUSERDATA) {
+		lua_pushstring(L, "not a ubus object");
+		return lua_error(L);
+	}
+
+	obj = lua_touserdata(L, -1);
+
+	ubus_remove_object(c->ctx, obj);
+
+	/* Reset light user data pointer. */
+	lua_pushstring(L, "__ubusobj");
+	lua_pushnil(L);
+	lua_settable(L, 2);
+
+	/* Free allocated resources. */
+	free(obj->type);
+	free((struct ubus_method *)obj->methods);
+
+	lua_obj = container_of(obj, struct ubus_lua_object, o);
+
+	if (lua_obj->rsubscriber) {
+		lua_getglobal(L, "__ubus_cb_publisher");
+		lua_rawgeti(L, -1, lua_obj->rsubscriber);
+		luaL_unref(L, -2, lua_obj->rsubscriber);
+		lua_pop(L, 2);
+	}
+
+	lua_getglobal(L, "__ubus_cb");
+	lua_rawgeti(L, -1, lua_obj->r);
+	luaL_unref(L, -2, lua_obj->r);
+	lua_pop(L, 2);
+
+	free(lua_obj);
+
+	return 0;
+}
+
 static int
 ubus_lua_notify( lua_State *L )
 {
@@ -949,6 +997,7 @@ static const luaL_Reg ubus[] = {
 	{ "connect", ubus_lua_connect },
 	{ "objects", ubus_lua_objects },
 	{ "add", ubus_lua_add },
+	{ "remove", ubus_lua_remove },
 	{ "notify", ubus_lua_notify },
 	{ "reply", ubus_lua_reply },
 	{ "defer_request", ubus_lua_defer_request },
