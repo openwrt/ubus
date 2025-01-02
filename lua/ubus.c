@@ -577,9 +577,9 @@ static int ubus_lua_add(lua_State *L)
 				ubus_add_object(c->ctx, obj);
 
                                 /* allow future reference of ubus obj */
-				lua_pushstring(state,"__ubusobj");
-				lua_pushlightuserdata(state, obj);
-				lua_settable(state,-3);
+				lua_pushstring(L,"__ubusobj");
+				lua_pushlightuserdata(L, obj);
+				lua_settable(L,-3);
                         }
 		}
 		lua_pop(L, 1);
