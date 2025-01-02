@@ -192,6 +192,8 @@ void ubus_complete_deferred_request(struct ubus_context *ctx, struct ubus_reques
 	blob_put_int32(&b, UBUS_ATTR_STATUS, ret);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, req->object);
 	ubus_send_msg(ctx, req->seq, b.head, UBUS_MSG_STATUS, req->peer, req->fd);
+	if (req->fd >= 0)
+		close(req->fd);
 }
 
 static void ubus_put_data(struct blob_buf *buf, struct blob_attr *msg)
