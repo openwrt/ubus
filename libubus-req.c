@@ -137,6 +137,16 @@ static int64_t get_time_msec(void)
 	return val;
 }
 
+void ubus_flush_requests(struct ubus_context *ctx)
+{
+	struct ubus_request *req;
+
+	while (!list_empty(&ctx->requests)) {
+		req = list_first_entry(&ctx->requests, struct ubus_request, list);
+		ubus_set_req_status(req, UBUS_STATUS_TIMEOUT);
+	}
+}
+
 int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 			  int req_timeout)
 {

@@ -328,8 +328,10 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 	if (!ctx->stack_depth)
 		ctx->pending_timer.cb(&ctx->pending_timer);
 
-	if (u->eof)
+	if (u->eof) {
+		ubus_flush_requests(ctx);
 		ctx->connection_lost(ctx);
+	}
 }
 
 void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)

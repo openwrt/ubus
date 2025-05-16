@@ -264,6 +264,7 @@ int ubus_channel_connect(struct ubus_context *ctx, int fd,
 			 ubus_handler_t handler);
 int ubus_channel_create(struct ubus_context *ctx, int *remote_fd,
 			ubus_handler_t handler);
+void ubus_flush_requests(struct ubus_context *ctx);
 
 static inline bool
 ubus_context_is_channel(struct ubus_context *ctx)
