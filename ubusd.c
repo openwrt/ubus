@@ -144,7 +144,7 @@ static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
 {
 	struct ubus_msg_buf_list *ubl;
 
-	if (cl->txq_len + ub->len > UBUS_CLIENT_MAX_TXQ_LEN)
+	if (cl->txq_len + sizeof(ub->hdr) + ub->len > UBUS_CLIENT_MAX_TXQ_LEN)
 		return;
 
 	ubl = calloc(1, sizeof(struct ubus_msg_buf_list));
@@ -155,7 +155,7 @@ static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
 	ubl->msg = ubus_msg_ref(ub);
 
 	list_add_tail(&ubl->list, &cl->tx_queue);
-	cl->txq_len += ub->len;
+	cl->txq_len += ub->len + sizeof(ub->hdr);
 }
 
 /* takes the msgbuf reference */
