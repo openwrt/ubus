@@ -62,7 +62,7 @@ struct ubus_client {
 	struct list_head cmd_queue;
 	struct list_head tx_queue;
 	unsigned int txq_ofs;
-	unsigned int txq_len;
+	ssize_t txq_len;
 
 	struct ubus_msg_buf *pending_msg;
 	struct ubus_msg_buf *retmsg;
