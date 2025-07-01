@@ -88,6 +88,7 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 			switch(errno) {
 			case EINTR:
 			case EAGAIN:
+			case EACCES:
 				break;
 			default:
 				goto disconnect;
