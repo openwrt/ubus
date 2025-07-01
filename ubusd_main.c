@@ -101,7 +101,7 @@ retry_writev:
 		cl->txq_ofs += written;
 		cl->txq_len -= written;
 		if (cl->txq_ofs < ub->len + sizeof(ub->hdr))
-			break;
+			goto retry_writev;
 
 		cl->txq_ofs = 0;
 		ubus_msg_list_free(ubl);
