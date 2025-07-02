@@ -161,13 +161,12 @@ static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
 /* takes the msgbuf reference */
 void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub)
 {
-	bool write_direct = list_empty(&cl->tx_queue);
 	ssize_t written;
 
 	if (ub->hdr.type != UBUS_MSG_MONITOR)
 		ubusd_monitor_message(cl, ub, true);
 
-	if (write_direct) {
+	if (list_empty(&cl->tx_queue)) {
 		written = ubus_msg_writev(cl->sock.fd, ub, 0);
 
 		if (written < 0)
@@ -184,7 +183,4 @@ void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub)
 	}
 
 	ubus_msg_enqueue(cl, ub);
-
-	if (write_direct)
-		cl->sock.cb(&cl->sock, ULOOP_WRITE);
 }
