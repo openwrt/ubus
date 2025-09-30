@@ -20,7 +20,7 @@ FOREACH(test_case ${test_cases})
 ENDFOREACH(test_case)
 
 ENABLE_LANGUAGE(CXX)
-ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-std=gnu++11>)
+ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-std=gnu++20>)
 ADD_UNIT_TEST_CPP(test-cplusplus)
 ADD_TEST(NAME cplusplus COMMAND test-cplusplus)
 

@@ -204,12 +204,8 @@ static const struct ubus_method test_methods[] = {
 static struct ubus_object_type test_object_type =
 	UBUS_OBJECT_TYPE("test", test_methods);
 
-static struct ubus_object test_object = {
-	.name = "test",
-	.type = &test_object_type,
-	.methods = test_methods,
-	.n_methods = ARRAY_SIZE(test_methods),
-};
+static struct ubus_object test_object =
+	UBUS_OBJECT("test", test_object_type);
 
 static void server_main(void)
 {

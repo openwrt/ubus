@@ -108,6 +108,19 @@ typedef bool (*ubus_new_object_handler_t)(struct ubus_context *ctx, struct ubus_
 #define UBUS_TAG_ADMIN		(1ul << 1)
 #define UBUS_TAG_PRIVATE	(1ul << 2)
 
+#define UBUS_OBJECT(_name, _type)			\
+	{						\
+		.avl = {},				\
+		.name = _name,				\
+		.id = 0,				\
+		.path = NULL,				\
+		.type = &(_type),			\
+		.subscribe_cb = NULL,			\
+		.has_subscribers = false,		\
+		.methods = NULL,			\
+		.n_methods = -1				\
+	}
+
 struct ubus_method {
 	const char *name;
 	ubus_handler_t handler;
