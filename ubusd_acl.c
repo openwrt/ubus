@@ -223,6 +223,19 @@ ubusd_acl_load_extra_gids(struct ubus_client *cl, pid_t pid)
 	return 0;
 }
 
+#define RETRY_MAX	6	/* total attempts */
+#define RETRY_US	20000	/* 20 ms between attempts */
+
+static inline int is_transient_err(int e) {
+	return e == 0		/* "not found" window */
+		|| e == EACCES
+		|| e == EPERM
+		|| e == EBUSY
+		|| e == ESTALE
+		|| e == EIO
+		|| e == EINTR;
+}
+
 int
 ubusd_acl_init_client(struct ubus_client *cl, int fd)
 {
@@ -241,15 +254,41 @@ ubusd_acl_init_client(struct ubus_client *cl, int fd)
 	memset(&cred, 0, sizeof(cred));
 #endif
 
+	int pw_attempt = 0, gr_attempt = 0;
+
+retry_getpwuid:
+	errno = 0;
 	pwd = getpwuid(cred.uid);
 	if (!pwd) {
-		ULOG_ERR("Failed getpwuid(): %m\n");
+		int saved = errno;
+		if (++pw_attempt < RETRY_MAX && is_transient_err(saved)) {
+			usleep(RETRY_US);
+			goto retry_getpwuid;
+		}
+		if (saved == 0)
+			ULOG_ERR("getpwuid(%u): user not found after %d attempts\n",
+					 (unsigned)cred.uid, pw_attempt);
+		else
+			ULOG_ERR("Failed getpwuid(%u) after %d attempts: %s\n",
+					 (unsigned)cred.uid, pw_attempt, strerror(saved));
 		return -1;
 	}
 
+retry_getgrgid:
+	errno = 0;
 	group = getgrgid(cred.gid);
 	if (!group) {
-		ULOG_ERR("Failed getgrgid(): %m\n");
+		int saved = errno;
+		if (++gr_attempt < RETRY_MAX && is_transient_err(saved)) {
+			usleep(RETRY_US);
+			goto retry_getgrgid;
+		}
+		if (saved == 0)
+			ULOG_ERR("getgrgid(%u): group not found after %d attempts\n",
+					 (unsigned)cred.gid, gr_attempt);
+		else
+			ULOG_ERR("Failed getgrgid(%u) after %d attempts: %s\n",
+					 (unsigned)cred.gid, gr_attempt, strerror(saved));
 		return -1;
 	}
 
