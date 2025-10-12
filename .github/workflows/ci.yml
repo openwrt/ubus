@@ -1,0 +1,110 @@
+name: ubus
+
+on:
+  pull_request:
+  push:
+
+env:
+  LUA_VERSION: 5.1.5
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            gcc: /usr/bin/aarch64-linux-gnu-gcc
+            packages: gcc-aarch64-linux-gnu
+          - arch: arm
+            gcc: /usr/bin/arm-linux-gnueabi-gcc
+            packages: gcc-arm-linux-gnueabi
+          - arch: mips
+            gcc: /usr/bin/mips-linux-gnu-gcc
+            packages: gcc-mips-linux-gnu
+          - arch: x86_64
+            gcc: /usr/bin/x86_64-linux-gnu-gcc
+            packages: gcc-x86-64-linux-gnu
+
+    steps:
+      - name: Checkout uci
+        uses: actions/checkout@v5
+
+      - name: Checkout json-c
+        uses: actions/checkout@v5
+        with:
+          repository: json-c/json-c
+          path: depends/json-c
+
+      - name: Checkout libubox
+        uses: actions/checkout@v5
+        with:
+          repository: openwrt/libubox
+          path: depends/libubox
+
+      - name: Install dependencies
+        run: |
+          sudo apt install ${{ matrix.packages }}
+
+      - name: Prepare build
+        run: |
+          mkdir -p ${GITHUB_WORKSPACE}/build
+
+      - name: Build json-c
+        working-directory: depends/json-c
+        run: |
+          cmake \
+            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
+            -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
+            -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
+            -DBUILD_SHARED_LIBS=OFF -DDISABLE_EXTRA_LIBS=ON  \
+            --install-prefix ${GITHUB_WORKSPACE}/build
+          make
+          make install
+
+      - name: Build lua
+        run: |
+          mkdir -p depends/lua
+          wget -qO- https://www.lua.org/ftp/lua-${{ env.LUA_VERSION }}.tar.gz | \
+            tar zxvf - -C depends/lua --strip-components=1
+          sed -i '/#define LUA_USE_READLINE/d' depends/lua/src/luaconf.h
+          sed -i 's/ -lreadline -lhistory -lncurses//g' depends/lua/src/Makefile
+          make -C depends/lua linux install \
+            CC=${{ matrix.gcc }} \
+            INSTALL_TOP=${GITHUB_WORKSPACE}/build
+
+      - name: Build libubox
+        working-directory: depends/libubox
+        run: |
+          cmake \
+            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
+            -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
+            -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
+            -DBUILD_LUA=ON -DBUILD_EXAMPLES=OFF \
+            -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua \
+            --install-prefix ${GITHUB_WORKSPACE}/build
+          make
+          make install
+
+      - name: Build ubus (basic)
+        run: |
+          cmake \
+            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
+            -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
+            -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
+            -DBUILD_LUA=OFF -DBUILD_EXAMPLES=OFF \
+            -B build/ubus-basic
+          make -C build/ubus-basic
+
+      - name: Build ubus (full)
+        run: |
+          cmake \
+            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
+            -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
+            -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
+            -DBUILD_LUA=ON -DBUILD_EXAMPLES=ON \
+            -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua \
+            -B build/ubus-full
+          make -C build/ubus-full
