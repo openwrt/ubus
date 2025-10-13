@@ -84,6 +84,9 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 	pattern = blobmsg_data(attr[EVREG_PATTERN]);
 
 	len = strlen(pattern);
+	if (len <= 0)
+		return UBUS_STATUS_PERMISSION_DENIED;
+
 	if (pattern[len - 1] == '*') {
 		partial = true;
 		pattern[len - 1] = 0;
