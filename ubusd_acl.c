@@ -81,11 +81,19 @@ static struct ubus_object *acl_obj;
 static int
 ubusd_acl_match_cred(struct ubus_client *cl, struct ubusd_acl_obj *obj)
 {
+	size_t i;
+
 	if (obj->uid != -1 && cl->uid == obj->uid)
 		return 0;
 
-	if (obj->gid != -1 && cl->gid == obj->gid)
-		return 0;
+	if (obj->gid != -1) {
+		if (cl->gid == obj->gid)
+			return 0;
+
+		for (i = 0; i < cl->n_extra_gid; i++)
+			if (cl->extra_gid[i] == obj->gid)
+				return 0;
+	}
 
 	return -1;
 }
@@ -170,6 +178,51 @@ ubusd_acl_check(struct ubus_client *cl, const char *obj,
 	return -1;
 }
 
+static int
+ubusd_acl_load_extra_gids(struct ubus_client *cl, pid_t pid)
+{
+#ifdef __linux__
+	char path[64];
+	FILE *f;
+	char line[512];
+	gid_t gids[UBUS_CLIENT_MAX_EXTRA_GID];
+	size_t n_gids = 0;
+
+	snprintf(path, sizeof(path), "/proc/%d/status", (int)pid);
+	f = fopen(path, "r");
+	if (!f)
+		return -1;
+
+	while (fgets(line, sizeof(line), f)) {
+		if (strncmp(line, "Groups:", 7) != 0)
+			continue;
+
+		char *p = line + 7;
+		while (*p && n_gids < UBUS_CLIENT_MAX_EXTRA_GID) {
+			char *end;
+			unsigned long gid = strtoul(p, &end, 10);
+			if (p == end)
+				break;
+			gids[n_gids++] = gid;
+			p = end;
+		}
+		break;
+	}
+
+	fclose(f);
+
+	if (n_gids > 0) {
+		cl->extra_gid = malloc(n_gids * sizeof(gid_t));
+		if (!cl->extra_gid)
+			return -1;
+		memcpy(cl->extra_gid, gids, n_gids * sizeof(gid_t));
+		cl->n_extra_gid = n_gids;
+	}
+#endif
+
+	return 0;
+}
+
 int
 ubusd_acl_init_client(struct ubus_client *cl, int fd)
 {
@@ -206,12 +259,15 @@ ubusd_acl_init_client(struct ubus_client *cl, int fd)
 	cl->group = strdup(group->gr_name);
 	cl->user = strdup(pwd->pw_name);
 
+	ubusd_acl_load_extra_gids(cl, cred.pid);
+
 	return 0;
 }
 
 void
 ubusd_acl_free_client(struct ubus_client *cl)
 {
+	free(cl->extra_gid);
 	free(cl->group);
 	free(cl->user);
 }
