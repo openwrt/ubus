@@ -1,0 +1,47 @@
+Source: ubus
+Maintainer: Felix Fietkau <nbd@nbd.name>
+Section: libs
+Priority: optional
+Standards-Version: 4.5.0
+Rules-Requires-Root: no
+Build-Depends: debhelper-compat (= 12), cmake, pkgconf, libjson-c-dev, libubox-dev
+Homepage: https://git.openwrt.org/project/ubus.git
+Vcs-Browser: https://git.openwrt.org/project/ubus.git
+Vcs-Git: https://git.openwrt.org/project/ubus.git
+
+Package: libubus
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Section: libs
+Description: OpenWrt RPC client library
+ Ubus is the OpenWrt micro bus architecture for inter-process communication
+ (IPC). It provides a system-wide message bus that allows different
+ processes to communicate with each other using a simple API.
+ .
+ This package contains the libubus shared library.
+
+Package: libubus-dev
+Architecture: any
+Multi-Arch: same
+Depends: libubus (= ${binary:Version}), libc6-dev|libc-dev, libjson-c-dev, libubox-dev, ${misc:Depends}
+Section: libdevel
+Description: Development files for libubus
+ Ubus is the OpenWrt micro bus architecture for inter-process communication
+ (IPC). It provides a system-wide message bus that allows different
+ processes to communicate with each other using a simple API.
+ .
+ This package contains the development files (headers, static libraries,
+ and symlinks) for libubus.
+
+Package: ubus
+Architecture: any
+Multi-Arch: foreign
+Depends: libubus (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: OpenWrt RPC daemon and CLI
+ Ubus is the OpenWrt micro bus architecture for inter-process communication
+ (IPC). It provides a system-wide message bus that allows different
+ processes to communicate with each other using a simple API.
+ .
+ This package contains the ubusd daemon and the ubus command-line tool.

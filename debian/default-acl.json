@@ -1,0 +1,12 @@
+{
+	"group": "ubus",
+	"access": {
+		"*": {
+			"methods": [ "*" ]
+		}
+	},
+	"publish": [ "*" ],
+	"subscribe": [ "*" ],
+	"listen": [ "*" ],
+	"send": [ "*" ]
+}

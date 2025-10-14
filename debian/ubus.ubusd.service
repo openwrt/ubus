@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenWrt micro bus daemon
+Documentation=https://git.openwrt.org/project/ubus.git
+DefaultDependencies=no
+Before=basic.target
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/ubusd
+Restart=always
+RestartSec=5
+RuntimeDirectory=ubus
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=sysinit.target

@@ -10,3 +10,13 @@ examples/client
 ubusd
 ubus
 install_manifest.txt
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/*.debhelper.log
+debian/*.substvars
+debian/files
+debian/libubus/
+debian/libubus-dev/
+debian/ubus/
+debian/changelog
+debian/tmp/

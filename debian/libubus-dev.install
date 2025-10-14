@@ -1,0 +1,4 @@
+usr/include/ubusmsg.h
+usr/include/ubus_common.h
+usr/include/libubus.h
+usr/lib/libubus.so

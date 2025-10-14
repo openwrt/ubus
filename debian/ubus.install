@@ -1,0 +1,3 @@
+usr/bin/ubus
+usr/sbin/ubusd
+debian/default-acl.json usr/share/acl.d/
