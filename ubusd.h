@@ -52,8 +52,8 @@ struct ubus_client {
 	struct uloop_fd sock;
 	struct blob_buf b;
 
-	uid_t uid;
-	gid_t gid;
+	int uid;
+	int gid;
 	char *user;
 	char *group;
 

@@ -46,6 +46,8 @@ struct ubusd_acl_obj {
 
 	const char *user;
 	const char *group;
+	int uid;
+	int gid;
 
 	struct blob_attr *methods;
 	struct blob_attr *tags;
@@ -61,6 +63,8 @@ struct ubusd_acl_file {
 
 	const char *user;
 	const char *group;
+	int uid;
+	int gid;
 
 	struct blob_attr *blob;
 	struct list_head acl;
@@ -77,10 +81,10 @@ static struct ubus_object *acl_obj;
 static int
 ubusd_acl_match_cred(struct ubus_client *cl, struct ubusd_acl_obj *obj)
 {
-	if (obj->user && !strcmp(cl->user, obj->user))
+	if (obj->uid != -1 && cl->uid == obj->uid)
 		return 0;
 
-	if (obj->group && !strcmp(cl->group, obj->group))
+	if (obj->gid != -1 && cl->gid == obj->gid)
 		return 0;
 
 	return -1;
@@ -256,6 +260,8 @@ ubusd_acl_alloc_obj(struct ubusd_acl_file *file, const char *obj)
 	o->partial = partial;
 	o->user = file->user;
 	o->group = file->group;
+	o->uid = file->uid;
+	o->gid = file->gid;
 	o->avl.key = memcpy(k, obj, len);
 
 	list_add(&o->list, &file->acl);
@@ -282,7 +288,7 @@ ubusd_acl_add_access(struct ubusd_acl_file *file, struct blob_attr *obj)
 	o->tags = tb[ACL_ACCESS_TAGS];
 	o->priv = tb[ACL_ACCESS_PRIV];
 
-	if (file->user || file->group)
+	if (file->uid > 0 || file->gid > 0)
 		file->ok = 1;
 }
 
@@ -348,12 +354,30 @@ ubusd_acl_file_add(struct ubusd_acl_file *file)
 	blobmsg_parse(acl_policy, __ACL_MAX, tb, blob_data(file->blob),
 		      blob_len(file->blob));
 
-	if (tb[ACL_USER])
+	file->uid = -1;
+	file->gid = -1;
+
+	if (tb[ACL_USER]) {
+		struct passwd *pwd;
+
 		file->user = blobmsg_get_string(tb[ACL_USER]);
-	else if (tb[ACL_GROUP])
+		pwd = getpwnam(file->user);
+		if (pwd)
+			file->uid = pwd->pw_uid;
+		else
+			file->uid = 0;
+	} else if (tb[ACL_GROUP]) {
+		struct group *grp;
+
 		file->group = blobmsg_get_string(tb[ACL_GROUP]);
-	else
+		grp = getgrnam(file->group);
+		if (grp)
+			file->gid = grp->gr_gid;
+		else
+			file->gid = 0;
+	} else {
 		return;
+	}
 
 	if (tb[ACL_ACCESS])
 		blobmsg_for_each_attr(cur, tb[ACL_ACCESS], rem)
