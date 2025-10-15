@@ -233,6 +233,11 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
 			return UBUS_STATUS_INVALID_ARGUMENT;
 	}
 
+	if (obj->n_methods < 0 && obj->type) { /* initialized via UBUS_OBJECT() */
+		obj->methods = obj->type->methods;
+		obj->n_methods = obj->type->n_methods;
+	}
+
 	if (ubus_start_request(ctx, &req, b.head, UBUS_MSG_ADD_OBJECT, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
