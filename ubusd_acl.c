@@ -307,6 +307,9 @@ ubusd_acl_alloc_obj(struct ubusd_acl_file *file, const char *obj)
 	char *k;
 	bool partial = false;
 
+	if (!len)
+		return NULL;
+
 	if (obj[len - 1] == '*') {
 		partial = true;
 		len--;
@@ -339,6 +342,8 @@ ubusd_acl_add_access(struct ubusd_acl_file *file, struct blob_attr *obj)
 		return;
 
 	o = ubusd_acl_alloc_obj(file, blobmsg_name(obj));
+	if (!o)
+		return;
 
 	o->methods = tb[ACL_ACCESS_METHODS];
 	o->tags = tb[ACL_ACCESS_TAGS];
@@ -353,6 +358,9 @@ ubusd_acl_add_subscribe(struct ubusd_acl_file *file, const char *obj)
 {
 	struct ubusd_acl_obj *o = ubusd_acl_alloc_obj(file, obj);
 
+	if (!o)
+		return;
+
 	o->subscribe = true;
 }
 
@@ -361,6 +369,9 @@ ubusd_acl_add_publish(struct ubusd_acl_file *file, const char *obj)
 {
 	struct ubusd_acl_obj *o = ubusd_acl_alloc_obj(file, obj);
 
+	if (!o)
+		return;
+
 	o->publish = true;
 }
 
@@ -368,12 +379,18 @@ static void ubusd_acl_add_listen(struct ubusd_acl_file *file, const char *obj)
 {
 	struct ubusd_acl_obj *o = ubusd_acl_alloc_obj(file, obj);
 
+	if (!o)
+		return;
+
 	o->listen = true;
 }
 
 static void ubusd_acl_add_send(struct ubusd_acl_file *file, const char *obj)
 {
 	struct ubusd_acl_obj *o = ubusd_acl_alloc_obj(file, obj);
+
+	if (!o)
+		return;
 
 	o->send = true;
 }

@@ -241,6 +241,9 @@ static int __ubusd_handle_lookup(struct ubus_client *cl,
 
 	objpath = blob_data(attr[UBUS_ATTR_OBJPATH]);
 	len = strlen(objpath);
+	if (!len)
+		return UBUS_STATUS_INVALID_ARGUMENT;
+
 	if (objpath[len - 1] != '*') {
 		obj = avl_find_element(&path, objpath, obj, path);
 		if (!obj)
