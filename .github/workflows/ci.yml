@@ -27,7 +27,15 @@ jobs:
           - arch: x86_64
             gcc: /usr/bin/x86_64-linux-gnu-gcc
             packages: gcc-x86-64-linux-gnu
-
+    outputs:
+      size-aarch64-basic: ${{ steps.basic.outputs.size_aarch64 }}
+      size-aarch64-full: ${{ steps.full.outputs.size_aarch64 }}
+      size-arm-basic: ${{ steps.basic.outputs.size_arm }}
+      size-arm-full: ${{ steps.full.outputs.size_arm }}
+      size-mips-basic: ${{ steps.basic.outputs.size_mips }}
+      size-mips-full: ${{ steps.full.outputs.size_mips }}
+      size-x86_64-basic: ${{ steps.basic.outputs.size_x86_64 }}
+      size-x86_64-full: ${{ steps.full.outputs.size_x86_64 }}
     steps:
       - name: Checkout uci
         uses: actions/checkout@v5
@@ -56,7 +64,6 @@ jobs:
         working-directory: depends/json-c
         run: |
           cmake \
-            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
             -DBUILD_SHARED_LIBS=OFF -DDISABLE_EXTRA_LIBS=ON  \
@@ -79,7 +86,6 @@ jobs:
         working-directory: depends/libubox
         run: |
           cmake \
-            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
             -DBUILD_LUA=ON -DBUILD_EXAMPLES=OFF \
@@ -88,23 +94,59 @@ jobs:
           make
           make install
 
-      - name: Build ubus (basic)
+      - id: basic
+        name: Build ubus (basic)
+        env:
+          BUILD_DIR: build/ubus-basic
         run: |
           cmake \
-            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
             -DBUILD_LUA=OFF -DBUILD_EXAMPLES=OFF \
-            -B build/ubus-basic
-          make -C build/ubus-basic
+            -B $BUILD_DIR
+          make -C $BUILD_DIR
+          echo "size_${{ matrix.arch }}=$( find $BUILD_DIR -type f -name ubus -printf '%s' )" >> $GITHUB_OUTPUT
 
-      - name: Build ubus (full)
+      - id: full
+        name: Build ubus (full)
+        env:
+          BUILD_DIR: build/ubus-full
         run: |
           cmake \
-            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
             -DBUILD_LUA=ON -DBUILD_EXAMPLES=ON \
             -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua \
-            -B build/ubus-full
-          make -C build/ubus-full
+            -B $BUILD_DIR
+          make -C $BUILD_DIR
+          echo "size_${{ matrix.arch }}=$( find $BUILD_DIR -type f -name ubus -printf '%s' )" >> $GITHUB_OUTPUT
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubus-${{ matrix.arch }}-binaries
+          path: |
+            build/ubus-*/ubus
+          if-no-files-found: error
+
+  summary:
+    name: Sizes
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sizes summary
+        env:
+          size_aarch64_basic: ${{needs.build.outputs.size-aarch64-basic}}
+          size_aarch64_full: ${{needs.build.outputs.size-aarch64-full}}
+          size_arm_basic: ${{needs.build.outputs.size-arm-basic}}
+          size_arm_full: ${{needs.build.outputs.size-arm-full}}
+          size_mips_basic: ${{needs.build.outputs.size-mips-basic}}
+          size_mips_full: ${{needs.build.outputs.size-mips-full}}
+          size_x86_64_basic: ${{needs.build.outputs.size-x86_64-basic}}
+          size_x86_64_full: ${{needs.build.outputs.size-x86_64-full}}
+        run: |
+          echo "### ${GITHUB_WORKFLOW} sizes :floppy_disk:" >> $GITHUB_STEP_SUMMARY
+          echo "| Variant | aarch64 | arm | mips | x86_64 |" >> $GITHUB_STEP_SUMMARY
+          echo "| :---: | :---: | :---: | :---: | :---: |" >> $GITHUB_STEP_SUMMARY
+          echo "| basic | ${size_aarch64_basic} | ${size_arm_basic} | ${size_mips_basic} | ${size_x86_64_basic} |" >> $GITHUB_STEP_SUMMARY
+          echo "| full | ${size_aarch64_full} | ${size_arm_full} | ${size_mips_full} | ${size_x86_64_full} |" >> $GITHUB_STEP_SUMMARY
