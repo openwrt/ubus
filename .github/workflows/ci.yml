@@ -70,7 +70,8 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF \
             -DDISABLE_EXTRA_LIBS=ON \
             -DBUILD_TESTING=OFF \
-            --install-prefix ${GITHUB_WORKSPACE}/build
+            --install-prefix ${GITHUB_WORKSPACE}/build \
+            -B . -S .
           make
           make install
 
@@ -91,9 +92,11 @@ jobs:
           cmake \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
-            -DBUILD_LUA=ON -DBUILD_EXAMPLES=OFF \
+            -DBUILD_LUA=ON \
+            -DBUILD_EXAMPLES=OFF \
             -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua \
-            --install-prefix ${GITHUB_WORKSPACE}/build
+            --install-prefix ${GITHUB_WORKSPACE}/build \
+            -B . -S .
           make
           make install
 
@@ -105,8 +108,9 @@ jobs:
           cmake \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
-            -DBUILD_LUA=OFF -DBUILD_EXAMPLES=OFF \
-            -B $BUILD_DIR
+            -DBUILD_LUA=OFF \
+            -DBUILD_EXAMPLES=OFF \
+            -B $BUILD_DIR -S .
           make -C $BUILD_DIR
           echo "size_${{ matrix.arch }}=$( find $BUILD_DIR -type f -name ubus -printf '%s' )" >> $GITHUB_OUTPUT
 
@@ -118,9 +122,10 @@ jobs:
           cmake \
             -DCMAKE_C_COMPILER=${{ matrix.gcc }} \
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
-            -DBUILD_LUA=ON -DBUILD_EXAMPLES=ON \
+            -DBUILD_LUA=ON \
+            -DBUILD_EXAMPLES=ON \
             -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua \
-            -B $BUILD_DIR
+            -B $BUILD_DIR -S .
           make -C $BUILD_DIR
           echo "size_${{ matrix.arch }}=$( find $BUILD_DIR -type f -name ubus -printf '%s' )" >> $GITHUB_OUTPUT
 
@@ -192,7 +197,8 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF \
             -DDISABLE_EXTRA_LIBS=ON \
             -DBUILD_TESTING=OFF \
-            --install-prefix ${GITHUB_WORKSPACE}/build
+            --install-prefix ${GITHUB_WORKSPACE}/build \
+            -B . -S .
           make
           make install
 
@@ -214,7 +220,8 @@ jobs:
             -DBUILD_LUA=ON \
             -DBUILD_EXAMPLES=OFF \
             -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua \
-            --install-prefix ${GITHUB_WORKSPACE}/build
+            --install-prefix ${GITHUB_WORKSPACE}/build \
+            -B . -S .
           make
           make install
 
@@ -224,7 +231,8 @@ jobs:
             -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
             -DBUILD_LUA=ON \
             -DUNIT_TESTING=ON \
-            -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua
+            -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua \
+            -B . -S .
           make
 
       - name: Test ubus
