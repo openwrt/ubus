@@ -5,6 +5,7 @@ CMakeFiles
 *.a
 *.so
 *.dylib
+build
 examples/server
 examples/client
 ubusd
