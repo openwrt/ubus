@@ -153,3 +153,80 @@ jobs:
           echo "| :---: | :---: | :---: | :---: | :---: |" >> $GITHUB_STEP_SUMMARY
           echo "| basic | ${size_aarch64_basic} | ${size_arm_basic} | ${size_mips_basic} | ${size_x86_64_basic} |" >> $GITHUB_STEP_SUMMARY
           echo "| full | ${size_aarch64_full} | ${size_arm_full} | ${size_mips_full} | ${size_x86_64_full} |" >> $GITHUB_STEP_SUMMARY
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ubus
+        uses: actions/checkout@v5
+
+      - name: Checkout json-c
+        uses: actions/checkout@v5
+        with:
+          repository: json-c/json-c
+          path: depends/json-c
+
+      - name: Checkout libubox
+        uses: actions/checkout@v5
+        with:
+          repository: openwrt/libubox
+          path: depends/libubox
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install valgrind
+
+      - name: Prepare build
+        run: |
+          mkdir -p ${GITHUB_WORKSPACE}/build
+          mkdir -p ${GITHUB_WORKSPACE}/depends/lua
+          echo "${GITHUB_WORKSPACE}/build/bin" >> $GITHUB_PATH
+
+      - name: Build json-c
+        working-directory: depends/json-c
+        run: |
+          cmake \
+            -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DDISABLE_EXTRA_LIBS=ON \
+            -DBUILD_TESTING=OFF \
+            --install-prefix ${GITHUB_WORKSPACE}/build
+          make
+          make install
+
+      - name: Build lua
+        working-directory: depends/lua
+        run: |
+          wget -qO- https://www.lua.org/ftp/lua-${{ env.LUA_VERSION }}.tar.gz | \
+            tar zxvf - --strip-components=1
+          sed -i '/#define LUA_USE_READLINE/d' src/luaconf.h
+          sed -i 's/ -lreadline -lhistory -lncurses//g' src/Makefile
+          make linux install \
+            INSTALL_TOP=${GITHUB_WORKSPACE}/build
+
+      - name: Build libubox
+        working-directory: depends/libubox
+        run: |
+          cmake \
+            -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
+            -DBUILD_LUA=ON \
+            -DBUILD_EXAMPLES=OFF \
+            -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua \
+            --install-prefix ${GITHUB_WORKSPACE}/build
+          make
+          make install
+
+      - name: Build ubus
+        run: |
+          cmake \
+            -DCMAKE_PREFIX_PATH=${GITHUB_WORKSPACE}/build \
+            -DBUILD_LUA=ON \
+            -DUNIT_TESTING=ON \
+            -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua
+          make
+
+      - name: Test ubus
+        run: |
+          make test CTEST_OUTPUT_ON_FAILURE=1

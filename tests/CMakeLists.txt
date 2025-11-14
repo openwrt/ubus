@@ -1,14 +1,16 @@
 ADD_SUBDIRECTORY(cram)
 
+FIND_LIBRARY(json_script_library NAMES json_script)
+
 MACRO(ADD_UNIT_TEST name)
   ADD_EXECUTABLE(${name} ${name}.c)
-  TARGET_LINK_LIBRARIES(${name} ubox blobmsg_json json_script ${json})
+  TARGET_LINK_LIBRARIES(${name} ${ubox_library} ${blob_library} ${json_script_library} ${json})
   TARGET_INCLUDE_DIRECTORIES(${name} PRIVATE ${PROJECT_SOURCE_DIR})
 ENDMACRO(ADD_UNIT_TEST)
 
 MACRO(ADD_UNIT_TEST_CPP name)
   ADD_EXECUTABLE(${name} ${name}.cpp)
-  TARGET_LINK_LIBRARIES(${name} ubox blobmsg_json json_script ${json})
+  TARGET_LINK_LIBRARIES(${name} ${ubox_library} ${blob_library} ${json_script_library} ${json})
   TARGET_INCLUDE_DIRECTORIES(${name} PRIVATE ${PROJECT_SOURCE_DIR})
 ENDMACRO(ADD_UNIT_TEST_CPP)
 
