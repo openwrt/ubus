@@ -195,6 +195,7 @@ jobs:
           mkdir -p ${GITHUB_WORKSPACE}/build
           mkdir -p ${GITHUB_WORKSPACE}/depends/lua
           echo "${GITHUB_WORKSPACE}/build/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=${GITHUB_WORKSPACE}/build/lib:${{ env.LD_LIBRARY_PATH }}" >> $GITHUB_ENV
 
       - name: Build json-c
         working-directory: depends/json-c
@@ -239,8 +240,10 @@ jobs:
             -DBUILD_LUA=ON \
             -DUNIT_TESTING=ON \
             -DLUAPATH=${GITHUB_WORKSPACE}/build/lib/lua \
+            --install-prefix ${GITHUB_WORKSPACE}/build \
             -B . -S .
           make
+          make install
 
       - name: Test ubus
         run: |

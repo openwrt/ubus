@@ -23,6 +23,10 @@ DEPSDIR="${BUILDDIR}/depends"
 [ -e "${BUILDDIR}" ] || mkdir "${BUILDDIR}"
 [ -e "${DEPSDIR}" ] || mkdir "${DEPSDIR}"
 
+# Prepare env
+export LD_LIBRARY_PATH="${BUILDDIR}/lib:${LD_LIBRARY_PATH:-}"
+export PATH="${BUILDDIR}/bin:${PATH:-}"
+
 # Download deps
 cd "${DEPSDIR}"
 [ -e "json-c" ] || git clone https://github.com/json-c/json-c.git
@@ -73,11 +77,16 @@ cmake							\
 	-B "${BUILDDIR}"				\
 	-DCMAKE_PREFIX_PATH="${BUILDDIR}"		\
 	-DLUAPATH=${BUILDDIR}/lib/lua			\
+	--install-prefix "${BUILDDIR}"			\
 	${BUILD_ARGS}
-make -C "${BUILDDIR}" all test CTEST_OUTPUT_ON_FAILURE=1
+make -C "${BUILDDIR}"
+make -C "${BUILDDIR}" install
+
+# Test ubus
+make -C "${BUILDDIR}" test CTEST_OUTPUT_ON_FAILURE=1
 
 set +x
-echo "✅ Success - the ubus library is available at ${BUILDDIR}"
+echo "✅ Success - ubus is available at ${BUILDDIR}"
 echo "👷 You can rebuild ubus by running 'make -C build'"
 
 exit 0
