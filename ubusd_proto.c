@@ -583,10 +583,10 @@ struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
 	cl->pending_msg_fd = -1;
 
 	if (!ubus_alloc_id(&clients, &cl->id, 0))
-		goto free;
+		goto acl_free;
 
 	if (ubusd_proto_init_retmsg(cl))
-		goto free;
+		goto delete_no_retmsg;
 
 	if (!ubusd_send_hello(cl))
 		goto delete;
@@ -594,7 +594,12 @@ struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
 	return cl;
 
 delete:
+	ubus_msg_free(cl->retmsg);
+delete_no_retmsg:
+	blob_buf_free(&cl->b);
 	ubus_free_id(&clients, &cl->id);
+acl_free:
+	ubusd_acl_free_client(cl);
 free:
 	free(cl);
 	return NULL;
