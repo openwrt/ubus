@@ -316,6 +316,8 @@ ubusd_acl_alloc_obj(struct ubusd_acl_file *file, const char *obj)
 	}
 
 	o = calloc_a(sizeof(*o), &k, len + 1);
+	if (!o)
+		return NULL;
 	o->partial = partial;
 	o->user = file->user;
 	o->group = file->group;
