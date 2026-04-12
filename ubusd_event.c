@@ -111,24 +111,26 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 	return 0;
 }
 
-static void ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *cl,
-				 struct ubus_object *obj, const char *id,
-				 event_fill_cb fill_cb, void *cb_priv)
+static int ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *cl,
+				struct ubus_object *obj, const char *id,
+				event_fill_cb fill_cb, void *cb_priv)
 {
 	uint32_t *objid_ptr;
 
 	/* do not loop back events */
 	if (obj->client == cl)
-	    return;
+	    return 0;
 
 	/* do not send duplicate events */
 	if (obj->event_seen == obj_event_seq)
-		return;
+		return 0;
 
 	obj->event_seen = obj_event_seq;
 
 	if (!*ub) {
 		*ub = fill_cb(cb_priv, id);
+		if (!*ub)
+			return UBUS_STATUS_UNKNOWN_ERROR;
 		(*ub)->hdr.type = UBUS_MSG_INVOKE;
 		(*ub)->hdr.peer = 0;
 	}
@@ -138,6 +140,7 @@ static void ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *c
 
 	(*ub)->hdr.seq = ++event_seq;
 	ubus_msg_send(obj->client, *ub);
+	return 0;
 }
 
 int ubusd_send_event(struct ubus_client *cl, const char *id,
@@ -146,6 +149,7 @@ int ubusd_send_event(struct ubus_client *cl, const char *id,
 	struct ubus_msg_buf *ub = NULL;
 	struct event_source *ev;
 	int match_len = 0;
+	int ret = 0;
 
 	if (ubusd_acl_check(cl, id, NULL, UBUS_ACL_SEND))
 		return UBUS_STATUS_PERMISSION_DENIED;
@@ -176,13 +180,15 @@ int ubusd_send_event(struct ubus_client *cl, const char *id,
 				continue;
 		}
 
-		ubusd_send_event_msg(&ub, cl, ev->obj, id, fill_cb, cb_priv);
+		ret = ubusd_send_event_msg(&ub, cl, ev->obj, id, fill_cb, cb_priv);
+		if (ret)
+			break;
 	}
 
 	if (ub)
 		ubus_msg_free(ub);
 
-	return 0;
+	return ret;
 }
 
 enum {
