@@ -461,7 +461,11 @@ static int ubusd_handle_add_watch(struct ubus_client *cl, struct ubus_msg_buf *u
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	if (!target->path.key) {
-		if (strcmp(target->client->user, cl->user) && strcmp(target->client->group, cl->group))
+		bool same_user = target->client->user && cl->user &&
+				 !strcmp(target->client->user, cl->user);
+		bool same_group = target->client->group && cl->group &&
+				  !strcmp(target->client->group, cl->group);
+		if (!same_user && !same_group)
 			return UBUS_STATUS_NOT_FOUND;
 	} else if (ubusd_acl_check(cl, target->path.key, NULL, UBUS_ACL_SUBSCRIBE)) {
 		return UBUS_STATUS_NOT_FOUND;
