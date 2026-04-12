@@ -191,7 +191,7 @@ ubusd_acl_load_extra_gids(struct ubus_client *cl, pid_t pid)
 	snprintf(path, sizeof(path), "/proc/%d/status", (int)pid);
 	f = fopen(path, "r");
 	if (!f)
-		return -1;
+		return 0;
 
 	while (fgets(line, sizeof(line), f)) {
 		if (strncmp(line, "Groups:", 7) != 0)
@@ -257,9 +257,27 @@ ubusd_acl_init_client(struct ubus_client *cl, int fd)
 	cl->gid = cred.gid;
 
 	cl->group = strdup(group->gr_name);
-	cl->user = strdup(pwd->pw_name);
+	if (!cl->group) {
+		ULOG_ERR("Failed strdup() for group\n");
+		return -1;
+	}
 
-	ubusd_acl_load_extra_gids(cl, cred.pid);
+	cl->user = strdup(pwd->pw_name);
+	if (!cl->user) {
+		ULOG_ERR("Failed strdup() for user\n");
+		free(cl->group);
+		cl->group = NULL;
+		return -1;
+	}
+
+	if (ubusd_acl_load_extra_gids(cl, cred.pid)) {
+		ULOG_ERR("Failed to load extra gids\n");
+		free(cl->user);
+		cl->user = NULL;
+		free(cl->group);
+		cl->group = NULL;
+		return -1;
+	}
 
 	return 0;
 }
