@@ -686,5 +686,6 @@ void ubusd_acl_init(void)
 {
 	ubus_init_string_tree(&ubusd_acls, true);
 	acl_obj = ubusd_create_object_internal(NULL, UBUS_SYSTEM_OBJECT_ACL);
-	acl_obj->recv_msg = ubusd_acl_recv;
+	if (acl_obj)
+		acl_obj->recv_msg = ubusd_acl_recv;
 }
