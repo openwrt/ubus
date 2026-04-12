@@ -559,7 +559,7 @@ static int ubus_lua_add(lua_State *L)
 	struct ubus_lua_connection *c = luaL_checkudata(L, 1, METANAME);
 
 	/* verify top level object */
-	if (lua_istable(L, 1)) {
+	if (!lua_istable(L, 2)) {
 		lua_pushstring(L, "you need to pass a table");
 		return lua_error(L);
 	}
