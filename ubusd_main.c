@@ -4,12 +4,15 @@
  * SPDX-License-Identifier: LGPL-2.1-only
  */
 
+#define _GNU_SOURCE
+
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #ifdef FreeBSD
 #include <sys/param.h>
 #endif
+#include <fcntl.h>
 #include <string.h>
 #include <syslog.h>
 
@@ -245,10 +248,28 @@ static int usage(const char *progname)
 	return 1;
 }
 
+static int sighup_pipe[2] = { -1, -1 };
+
 static void sighup_handler(int sig)
 {
+	int saved_errno = errno;
+	char c = 0;
+	ssize_t r = write(sighup_pipe[1], &c, sizeof(c));
+	(void)r;
+	errno = saved_errno;
+}
+
+static void sighup_fd_cb(struct uloop_fd *ufd, unsigned int events)
+{
+	char buf[16];
+	while (read(ufd->fd, buf, sizeof(buf)) > 0)
+		;
 	ubusd_acl_load();
 }
+
+static struct uloop_fd sighup_ufd = {
+	.cb = sighup_fd_cb,
+};
 
 static void mkdir_sockdir()
 {
@@ -272,11 +293,31 @@ int main(int argc, char **argv)
 	int ch;
 
 	signal(SIGPIPE, SIG_IGN);
-	signal(SIGHUP, sighup_handler);
+
+#ifdef __linux__
+	ret = pipe2(sighup_pipe, O_NONBLOCK | O_CLOEXEC);
+#else
+	ret = pipe(sighup_pipe);
+	if (ret == 0) {
+		fcntl(sighup_pipe[0], F_SETFL, O_NONBLOCK);
+		fcntl(sighup_pipe[0], F_SETFD, FD_CLOEXEC);
+		fcntl(sighup_pipe[1], F_SETFL, O_NONBLOCK);
+		fcntl(sighup_pipe[1], F_SETFD, FD_CLOEXEC);
+	}
+#endif
+	if (ret == 0)
+		signal(SIGHUP, sighup_handler);
+	else
+		signal(SIGHUP, SIG_IGN);
 
 	ulog_open(ULOG_KMSG | ULOG_SYSLOG, LOG_DAEMON, "ubusd");
 	openlog("ubusd", LOG_PID, LOG_DAEMON);
 	uloop_init();
+
+	if (sighup_pipe[0] >= 0) {
+		sighup_ufd.fd = sighup_pipe[0];
+		uloop_fd_add(&sighup_ufd, ULOOP_READ);
+	}
 
 	while ((ch = getopt(argc, argv, "A:s:")) != -1) {
 		switch (ch) {
