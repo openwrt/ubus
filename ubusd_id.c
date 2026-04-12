@@ -15,12 +15,33 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#ifdef __linux__
+#include <sys/random.h>
+#endif
 #include <libubox/avl-cmp.h>
 
 #include "ubusmsg.h"
 #include "ubusd_id.h"
 
+#ifndef __linux__
 static int random_fd = -1;
+#endif
+
+static ssize_t read_random(void *buf, size_t len)
+{
+#ifdef __linux__
+	return getrandom(buf, len, 0);
+#else
+	if (random_fd < 0) {
+		random_fd = open("/dev/urandom", O_RDONLY);
+		if (random_fd < 0) {
+			perror("open /dev/urandom");
+			return -1;
+		}
+	}
+	return read(random_fd, buf, len);
+#endif
+}
 
 static int ubus_cmp_id(const void *k1, const void *k2, void *ptr)
 {
@@ -39,14 +60,6 @@ void ubus_init_string_tree(struct avl_tree *tree, bool dup)
 
 void ubus_init_id_tree(struct avl_tree *tree)
 {
-	if (random_fd < 0) {
-		random_fd = open("/dev/urandom", O_RDONLY);
-		if (random_fd < 0) {
-			perror("open");
-			exit(1);
-		}
-	}
-
 	avl_init(tree, ubus_cmp_id, false, NULL);
 }
 
@@ -59,7 +72,7 @@ bool ubus_alloc_id(struct avl_tree *tree, struct ubus_id *id, uint32_t val)
 	}
 
 	do {
-		if (read(random_fd, &id->id, sizeof(id->id)) != sizeof(id->id))
+		if (read_random(&id->id, sizeof(id->id)) != sizeof(id->id))
 			return false;
 
 		if (id->id < UBUS_SYSTEM_OBJECT_MAX)
