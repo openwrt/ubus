@@ -104,6 +104,10 @@ static void acl_recv_cb(struct ubus_request *req,
 	struct blob_attr *cur;
 	size_t rem;
 
+	struct blob_attr *new_blob = blob_memdup(msg);
+	if (!new_blob)
+		return;
+
 	if (acl_blob) {
 		struct acl_object *p, *q;
 
@@ -113,9 +117,9 @@ static void acl_recv_cb(struct ubus_request *req,
 		}
 		free(acl_blob);
 	}
-	acl_blob = blob_memdup(msg);
-	blobmsg_parse(acl_policy, __ACL_POLICY_MAX, tb, blobmsg_data(msg),
-		      blobmsg_data_len(msg));
+	acl_blob = new_blob;
+	blobmsg_parse(acl_policy, __ACL_POLICY_MAX, tb, blobmsg_data(acl_blob),
+		      blobmsg_data_len(acl_blob));
 
 	if (!tb[ACL_POLICY_SEQ] && !tb[ACL_POLICY_ACL])
 		return;
