@@ -74,6 +74,10 @@ out:
 	return err;
 }
 
+/*
+ * Note: any SCM_RIGHTS fd attached to the original message is not propagated
+ * to the queued copy — the caller must close it (or hand it off) separately.
+ */
 static void
 ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf)
 {
@@ -81,6 +85,8 @@ ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf)
 	void *data;
 
 	pending = calloc_a(sizeof(*pending), &data, blob_raw_len(buf->data));
+	if (!pending)
+		return;
 
 	pending->hdr.data = data;
 	memcpy(&pending->hdr.hdr, &buf->hdr, sizeof(buf->hdr));
