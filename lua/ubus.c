@@ -491,7 +491,7 @@ static struct ubus_object* ubus_lua_load_object(lua_State *L)
 {
 	struct ubus_lua_object *obj = NULL;
 	int mlen = lua_gettablelen(L, -1);
-	struct ubus_method *m;
+	struct ubus_method *m = NULL;
 	int midx = 0;
 
 	/* setup object pointers */
@@ -502,12 +502,19 @@ static struct ubus_object* ubus_lua_load_object(lua_State *L)
 	obj->o.name = lua_tostring(L, -2);
 
 	/* setup method pointers */
-	m = calloc(mlen, sizeof(struct ubus_method));
+	if (mlen > 0) {
+		m = calloc(mlen, sizeof(struct ubus_method));
+		if (!m) {
+			free(obj);
+			return NULL;
+		}
+	}
 	obj->o.methods = m;
 
 	/* setup type pointers */
 	obj->o.type = calloc(1, sizeof(struct ubus_object_type));
 	if (!obj->o.type) {
+		free(m);
 		free(obj);
 		return NULL;
 	}
