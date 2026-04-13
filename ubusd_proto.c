@@ -556,7 +556,8 @@ static int ubusd_proto_init_retmsg(struct ubus_client *cl)
 {
 	struct blob_buf *b = &cl->b;
 
-	blob_buf_init(&cl->b, 0);
+	if (blob_buf_init(&cl->b, 0))
+		return -1;
 	blob_put_int32(&cl->b, UBUS_ATTR_STATUS, 0);
 
 	/* we make the 'retmsg' buffer shared with the blob_buf b, to reduce mem duplication */
