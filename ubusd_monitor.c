@@ -91,6 +91,8 @@ ubusd_monitor_message(struct ubus_client *cl, struct ubus_msg_buf *ub, bool send
 	blob_put(&mb, UBUS_MONITOR_DATA, blob_data(ub->data), blob_len(ub->data));
 
 	ub = ubus_msg_new(mb.head, blob_raw_len(mb.head), true);
+	if (!ub)
+		return;
 	ub->hdr.type = UBUS_MSG_MONITOR;
 
 	list_for_each_entry(m, &monitors, list) {
