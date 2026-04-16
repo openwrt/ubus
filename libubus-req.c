@@ -487,10 +487,10 @@ void __hidden ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_
 			break;
 
 		if (fd >= 0) {
-			if (req->fd_cb)
+			if (req->fd_cb) {
 				req->fd_cb(req, fd);
-			else
-				close(fd);
+				fd = -1;
+			}
 		}
 
 		if (id >= 0)
@@ -505,6 +505,9 @@ void __hidden ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_
 			ubus_process_req_data(req, buf);
 		break;
 	}
+
+	if (fd >= 0)
+		close(fd);
 }
 
 int __ubus_monitor(struct ubus_context *ctx, const char *type)
