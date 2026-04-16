@@ -447,9 +447,13 @@ void ubus_shutdown(struct ubus_context *ctx)
 	if (!ctx)
 		return;
 	uloop_fd_delete(&ctx->sock);
-	close(ctx->sock.fd);
+	if (ctx->sock.fd >= 0) {
+		close(ctx->sock.fd);
+		ctx->sock.fd = -1;
+	}
 	uloop_timeout_cancel(&ctx->pending_timer);
 	free(ctx->msgbuf.data);
+	ctx->msgbuf.data = NULL;
 }
 
 void ubus_free(struct ubus_context *ctx)
