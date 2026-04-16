@@ -103,7 +103,7 @@ ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd)
 	case UBUS_MSG_STATUS:
 	case UBUS_MSG_DATA:
 		ubus_process_req_msg(ctx, buf, fd);
-		break;
+		return;
 
 	case UBUS_MSG_UNSUBSCRIBE:
 	case UBUS_MSG_NOTIFY:
@@ -119,7 +119,7 @@ ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd)
 		ctx->stack_depth++;
 		ubus_process_obj_msg(ctx, buf, fd);
 		ctx->stack_depth--;
-		break;
+		return;
 	case UBUS_MSG_MONITOR:
 		if (ubus_context_is_channel(ctx))
 			break;
@@ -128,6 +128,9 @@ ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd)
 			ctx->monitor_cb(ctx, buf->hdr.seq, buf->data);
 		break;
 	}
+
+	if (fd >= 0)
+		close(fd);
 }
 
 static void ubus_process_pending_msg(struct uloop_timeout *timeout)
