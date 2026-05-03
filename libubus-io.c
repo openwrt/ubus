@@ -464,8 +464,10 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 out_free:
 	free(buf);
 out_close:
-	if (ret)
+	if (ret) {
 		close(ctx->sock.fd);
+		ctx->sock.fd = -1;
+	}
 
 	return ret;
 }
