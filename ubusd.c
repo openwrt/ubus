@@ -153,6 +153,10 @@ static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
 
 	INIT_LIST_HEAD(&ubl->list);
 	ubl->msg = ubus_msg_ref(ub);
+	if (!ubl->msg) {
+		free(ubl);
+		return;
+	}
 
 	list_add_tail(&ubl->list, &cl->tx_queue);
 	cl->txq_len += ub->len + sizeof(ub->hdr);
