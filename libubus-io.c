@@ -448,7 +448,7 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 	if (read(ctx->sock.fd, blob_data(buf), blob_len(buf)) != (ssize_t) blob_len(buf))
 		goto out_free;
 
-	ctx->local_id = hdr.hdr.peer;
+	ctx->local_id = be32_to_cpu(hdr.hdr.peer);
 	if (ctx->local_id <= UBUS_CLIENT_ID_CHANNEL)
 		goto out_free;
 
