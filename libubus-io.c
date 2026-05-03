@@ -321,9 +321,18 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 		if (!get_next_msg(ctx, &recv_fd))
 			break;
 		ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
+		recv_fd = -1;
 		if (uloop_cancelling() || ctx->cancel_poll)
 			break;
 	}
+
+	/*
+	 * If get_next_msg() captured an fd via the header recvmsg but then
+	 * failed (header validate, body recv, alloc), the fd is sitting in
+	 * recv_fd unowned by anyone — close it instead of leaking.
+	 */
+	if (recv_fd >= 0)
+		close(recv_fd);
 
 	if (!ctx->stack_depth)
 		ctx->pending_timer.cb(&ctx->pending_timer);
