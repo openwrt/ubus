@@ -356,13 +356,19 @@ int ubus_channel_connect(struct ubus_context *ctx, int fd,
 		close(ctx->sock.fd);
 	}
 
+	int flags = fcntl(fd, F_GETFL);
+	if (flags < 0 ||
+	    fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0 ||
+	    fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) {
+		ctx->sock.fd = -1;
+		return -1;
+	}
+
 	ctx->sock.eof = false;
 	ctx->sock.error = false;
 	ctx->sock.fd = fd;
 	ctx->local_id = UBUS_CLIENT_ID_CHANNEL;
 	ctx->request_handler = handler;
-
-	fcntl(ctx->sock.fd, F_SETFL, fcntl(ctx->sock.fd, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
 
 	return 0;
 }

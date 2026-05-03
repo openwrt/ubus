@@ -443,9 +443,13 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 	if (ctx->local_id <= UBUS_CLIENT_ID_CHANNEL)
 		goto out_free;
 
-	ret = UBUS_STATUS_OK;
-	fcntl(ctx->sock.fd, F_SETFL, fcntl(ctx->sock.fd, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
+	int flags = fcntl(ctx->sock.fd, F_GETFL);
+	if (flags < 0 ||
+	    fcntl(ctx->sock.fd, F_SETFL, flags | O_NONBLOCK) < 0 ||
+	    fcntl(ctx->sock.fd, F_SETFD, FD_CLOEXEC) < 0)
+		goto out_free;
 
+	ret = UBUS_STATUS_OK;
 	ubus_refresh_state(ctx);
 
 out_free:
