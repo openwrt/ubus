@@ -61,7 +61,7 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 	char *pattern, *name;
 	uint32_t id;
 	bool partial = false;
-	int len;
+	size_t len;
 
 	if (!msg)
 		return UBUS_STATUS_INVALID_ARGUMENT;
@@ -84,7 +84,7 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 	pattern = blobmsg_data(attr[EVREG_PATTERN]);
 
 	len = strlen(pattern);
-	if (len <= 0)
+	if (!len)
 		return UBUS_STATUS_PERMISSION_DENIED;
 
 	if (pattern[len - 1] == '*') {

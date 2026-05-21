@@ -209,7 +209,7 @@ static int __ubusd_handle_lookup(struct ubus_client *cl,
 	struct ubus_object *obj = NULL;
 	char *objpath;
 	bool found = false;
-	int len;
+	size_t len;
 
 	if (!attr[UBUS_ATTR_OBJPATH]) {
 		if (cmd)

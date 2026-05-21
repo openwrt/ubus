@@ -37,7 +37,7 @@ static void ubus_unref_object_type(struct ubus_object_type *type)
 static bool ubus_create_obj_method(struct ubus_object_type *type, struct blob_attr *attr)
 {
 	struct ubus_method *m;
-	int bloblen = blob_raw_len(attr);
+	size_t bloblen = blob_raw_len(attr);
 
 	m = calloc(1, sizeof(*m) + bloblen);
 	if (!m)
