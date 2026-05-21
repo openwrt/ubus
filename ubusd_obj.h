@@ -56,7 +56,7 @@ struct ubus_object {
 			const char *method, struct blob_attr *msg);
 
 	int event_seen;
-	unsigned int invoke_seq;
+	uint16_t invoke_seq;
 };
 
 struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr **attr);

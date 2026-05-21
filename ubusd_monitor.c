@@ -19,7 +19,7 @@ static LIST_HEAD(monitors);
 struct ubus_monitor {
 	struct list_head list;
 	struct ubus_client *cl;
-	uint32_t seq;
+	uint16_t seq;
 };
 
 static void

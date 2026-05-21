@@ -75,7 +75,7 @@ struct ubusd_acl_file {
 const char *ubusd_acl_dir = "/usr/share/acl.d";
 static struct blob_buf bbuf;
 static struct avl_tree ubusd_acls;
-static int ubusd_acl_seq;
+static uint32_t ubusd_acl_seq;
 static struct ubus_object *acl_obj;
 
 static int

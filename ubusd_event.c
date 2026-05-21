@@ -16,7 +16,7 @@
 
 static struct avl_tree patterns;
 static struct ubus_object *event_obj;
-static int event_seq = 0;
+static uint16_t event_seq = 0;
 static int obj_event_seq = 1;
 
 struct event_source {
