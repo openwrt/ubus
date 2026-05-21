@@ -321,7 +321,7 @@ static struct ubusd_acl_obj*
 ubusd_acl_alloc_obj(struct ubusd_acl_file *file, const char *obj)
 {
 	struct ubusd_acl_obj *o;
-	int len = strlen(obj);
+	size_t len = strlen(obj);
 	char *k;
 	bool partial = false;
 
