@@ -17,6 +17,10 @@
 #include <fcntl.h>
 #ifdef __linux__
 #include <sys/random.h>
+/* Added in Linux 5.6; define it in case the libc headers are older. */
+#ifndef GRND_INSECURE
+#define GRND_INSECURE 0x0004
+#endif
 #endif
 #include <libubox/avl-cmp.h>
 
@@ -30,7 +34,12 @@ static int random_fd = -1;
 static ssize_t read_random(void *buf, size_t len)
 {
 #ifdef __linux__
-	return getrandom(buf, len, 0);
+	/*
+	 * IDs only need to be hard to guess, not crypto-strong.
+	 * GRND_INSECURE returns bytes without blocking on the CRNG, so
+	 * ubusd does not stall boot on boards whose pool seeds late.
+	 */
+	return getrandom(buf, len, GRND_INSECURE);
 #else
 	if (random_fd < 0) {
 		random_fd = open("/dev/urandom", O_RDONLY);
