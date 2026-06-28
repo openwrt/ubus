@@ -25,10 +25,11 @@ constexpr ubus_method test_methods[] = {
 	UBUS_METHOD_TAG_NOARG("hello5", handler, UBUS_TAG_STATUS),
 };
 
-constexpr ubus_object_type test_object_type = UBUS_OBJECT_TYPE("test", test_methods);
+constinit ubus_object_type test_object_type = UBUS_OBJECT_TYPE("test", test_methods);
+constinit ubus_object test_object = UBUS_OBJECT("testobj", test_object_type);
 
 int main()
 {
-	(void) test_object_type;
+	(void) test_object;
 	return 0;
 }
