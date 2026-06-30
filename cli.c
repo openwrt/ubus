@@ -40,11 +40,16 @@ static const char * const monitor_types[] = {
 static const char *format_type(void *priv, struct blob_attr *attr)
 {
 	static const char * const attr_types[] = {
-		[BLOBMSG_TYPE_INT8] = "\"Boolean\"",
-		[BLOBMSG_TYPE_INT32] = "\"Integer\"",
-		[BLOBMSG_TYPE_STRING] = "\"String\"",
+		[BLOBMSG_TYPE_UNSPEC] = "\"Unspecified\"",
 		[BLOBMSG_TYPE_ARRAY] = "\"Array\"",
 		[BLOBMSG_TYPE_TABLE] = "\"Table\"",
+		[BLOBMSG_TYPE_STRING] = "\"String\"",
+		[BLOBMSG_TYPE_INT64] = "\"Int64\"",
+		[BLOBMSG_TYPE_INT32] = "\"Integer\"",
+		[BLOBMSG_TYPE_INT16] = "\"Int16\"",
+		[BLOBMSG_TYPE_INT8] = "\"Int8\"",
+		[BLOBMSG_TYPE_BOOL] = "\"Boolean\"",
+		[BLOBMSG_TYPE_DOUBLE] = "\"Double\"",
 	};
 	const char *type = NULL;
 	size_t typeid;
@@ -442,6 +447,11 @@ ubus_cli_get_monitor_data(struct blob_attr *data)
 		[UBUS_ATTR_USER] = "user",
 		[UBUS_ATTR_GROUP] = "group",
 	};
+	/* Mark which INT8 attributes are boolean flags vs actual integers */
+	static const bool is_boolean[UBUS_ATTR_MAX] = {
+		[UBUS_ATTR_ACTIVE] = true,
+		[UBUS_ATTR_NO_REPLY] = true,
+	};
 	struct blob_attr *tb[UBUS_ATTR_MAX];
 	int i;
 
@@ -463,7 +473,12 @@ ubus_cli_get_monitor_data(struct blob_attr *data)
 			blobmsg_add_string(&b, n, blob_data(v));
 			break;
 		case BLOB_ATTR_INT8:
-			blobmsg_add_u8(&b, n, !!blob_get_int8(v));
+			/* Check if this INT8 field is semantically a boolean */
+			if (is_boolean[i]) {
+				blobmsg_add_bool(&b, n, !!blob_get_int8(v));
+			} else {
+				blobmsg_add_u8(&b, n, blob_get_int8(v));
+			}
 			break;
 		case BLOB_ATTR_NESTED:
 			blobmsg_add_field(&b, BLOBMSG_TYPE_TABLE, n, blobmsg_data(v), blobmsg_data_len(v));
