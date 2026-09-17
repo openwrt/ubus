@@ -145,6 +145,15 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	iov[1].iov_base = (char *) msg;
 	iov[1].iov_len = blob_raw_len(msg);
 
+	/* The peer discards anything larger and, on the ubusd path, disconnects
+	 * us for sending it, so fail here and let the caller find out. */
+	if (blob_pad_len(msg) > UBUS_MAX_MSGLEN) {
+		if (fd >= 0)
+			close(fd);
+
+		return -1;
+	}
+
 	ret = writev_retry(ctx->sock.fd, iov, ARRAY_SIZE(iov), fd);
 	if (ret < 0)
 		ctx->sock.eof = true;
