@@ -299,12 +299,18 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	hdrbuf.hdr.seq = be16_to_cpu(hdrbuf.hdr.seq);
 	hdrbuf.hdr.peer = be32_to_cpu(hdrbuf.hdr.peer);
 
-	if (!ubus_validate_hdr(&hdrbuf.hdr))
+	/* The header is already consumed, so the body cannot be skipped and the
+	 * stream cannot be resynchronised. */
+	if (!ubus_validate_hdr(&hdrbuf.hdr)) {
+		ctx->sock.eof = true;
 		return false;
+	}
 
 	len = blob_raw_len(&hdrbuf.data);
-	if (!alloc_msg_buf(ctx, len))
+	if (!alloc_msg_buf(ctx, len)) {
+		ctx->sock.eof = true;
 		return false;
+	}
 
 	memcpy(&ctx->msgbuf.hdr, &hdrbuf.hdr, sizeof(hdrbuf.hdr));
 	memcpy(ctx->msgbuf.data, &hdrbuf.data, sizeof(hdrbuf.data));
@@ -312,8 +318,10 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	iov.iov_base = (char *)ctx->msgbuf.data + sizeof(hdrbuf.data);
 	iov.iov_len = blob_len(ctx->msgbuf.data);
 	if (iov.iov_len > 0 &&
-	    recv_retry(ctx, &iov, true, NULL) <= 0)
+	    recv_retry(ctx, &iov, true, NULL) <= 0) {
+		ctx->sock.eof = true;
 		return false;
+	}
 
 	return true;
 }
