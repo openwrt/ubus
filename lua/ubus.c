@@ -14,9 +14,14 @@
  */
 
 #include <unistd.h>
+#include <stdbool.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <string.h>
 #include <libubus.h>
 #include <libubox/blobmsg.h>
 #include <libubox/blobmsg_json.h>
+#include <libubox/uloop.h>
 #include <lauxlib.h>
 #include <lua.h>
 
@@ -709,6 +714,368 @@ ubus_lua_call(lua_State *L)
 	return lua_gettop(L) - top;
 }
 
+/*
+ * Asynchronous invoke.
+ *
+ * The synchronous ubus_invoke() above runs its own event loop until the answer
+ * arrives, so a caller inside uloop stalls everything else it is running —
+ * timers, sockets, other callbacks — for as long as the peer takes. That is
+ * fine for a script and wrong for a daemon: one 'ubus call file exec sleep 5'
+ * freezes the whole process for five seconds.
+ *
+ * ubus_invoke_async() hands the request to the uloop the connection is already
+ * attached to (ubus_add_uloop in ubus_lua_connect) and returns immediately.
+ * What libubus does not provide is a deadline: a peer that never answers keeps
+ * the request on the pending list forever. So each call carries its own uloop
+ * timeout, and on expiry the request is aborted and the callback is told.
+ *
+ * ubus_abort_request() does not run complete_cb — it only unlinks the request —
+ * so exactly one of the two paths frees the state, guarded by ->done.
+ */
+
+struct ubus_lua_async_call {
+	struct ubus_request req;
+	struct uloop_timeout timeout;
+	struct ubus_context *ctx;
+	int cb_ref;
+	int result_ref;
+	int fd;
+	bool have_fd;
+	bool done;
+};
+
+static void
+ubus_lua_async_finish(struct ubus_lua_async_call *call, int status)
+{
+	lua_State *L = state;
+
+	if (call->done)
+		return;
+	call->done = true;
+	uloop_timeout_cancel(&call->timeout);
+
+	lua_getglobal(L, "__ubus_cb_async");
+	lua_rawgeti(L, -1, call->cb_ref);
+	lua_remove(L, -2);
+
+	if (lua_isfunction(L, -1)) {
+		if (call->result_ref != LUA_NOREF) {
+			lua_getglobal(L, "__ubus_cb_async");
+			lua_rawgeti(L, -1, call->result_ref);
+			lua_remove(L, -2);
+		} else {
+			lua_pushnil(L);
+		}
+		lua_pushinteger(L, status);
+		/*
+		 * Third value rather than a second callback: Lua discards extra
+		 * arguments, so every existing cb(result, status) keeps working
+		 * unchanged and the ones that want the descriptor take a third
+		 * parameter. nil where there was none.
+		 */
+		if (call->have_fd)
+			lua_pushinteger(L, call->fd);
+		else
+			lua_pushnil(L);
+
+		/*
+		 * pcall, not call: this runs from a uloop callback, and an error
+		 * thrown out of here would longjmp past libubus' own bookkeeping
+		 * and take the process with it.
+		 */
+		if (lua_pcall(L, 3, 0, 0) != 0) {
+			fprintf(stderr, "ubus: async callback failed: %s\n",
+				lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
+	} else {
+		lua_pop(L, 1);
+
+		/*
+		 * Nobody to hand it to. libubus would have closed it had we not
+		 * taken it, so not closing it here is a descriptor leaked for the
+		 * life of the process.
+		 */
+		if (call->have_fd && call->fd >= 0)
+			close(call->fd);
+	}
+
+	lua_getglobal(L, "__ubus_cb_async");
+	luaL_unref(L, -1, call->cb_ref);
+	if (call->result_ref != LUA_NOREF)
+		luaL_unref(L, -1, call->result_ref);
+	lua_pop(L, 1);
+
+	free(call);
+}
+
+static void
+ubus_lua_async_data_cb(struct ubus_request *req, int type, struct blob_attr *msg)
+{
+	struct ubus_lua_async_call *call =
+		container_of(req, struct ubus_lua_async_call, req);
+	lua_State *L = state;
+
+	if (!msg)
+		return;
+
+	/* a second reply would leak the first */
+	lua_getglobal(L, "__ubus_cb_async");
+	if (call->result_ref != LUA_NOREF)
+		luaL_unref(L, -1, call->result_ref);
+	ubus_lua_parse_blob_array(L, blob_data(msg), blob_len(msg), true);
+	call->result_ref = luaL_ref(L, -2);
+	lua_pop(L, 1);
+}
+
+/*
+ * A peer may answer with a file descriptor rather than with data — 'log read'
+ * with stream:true is the case this exists for, and libubus already carries
+ * the mechanism (libubus.h ubus_fd_handler_t, req->fd_cb).
+ *
+ * ubus_process_req_msg() calls this on UBUS_MSG_STATUS, before the completion
+ * runs, and closes the descriptor itself if nobody claims it. Claiming it
+ * therefore means owning it: from here on it is ours to hand to Lua, and Lua's
+ * to close.
+ */
+static void
+ubus_lua_async_fd_cb(struct ubus_request *req, int fd)
+{
+	struct ubus_lua_async_call *call =
+		container_of(req, struct ubus_lua_async_call, req);
+
+	/* one descriptor per request; a second would leak the first */
+	if (call->have_fd && call->fd >= 0)
+		close(call->fd);
+
+	call->fd = fd;
+	call->have_fd = true;
+}
+
+static void
+ubus_lua_async_complete_cb(struct ubus_request *req, int ret)
+{
+	ubus_lua_async_finish(container_of(req, struct ubus_lua_async_call, req), ret);
+}
+
+static void
+ubus_lua_async_timeout_cb(struct uloop_timeout *t)
+{
+	struct ubus_lua_async_call *call =
+		container_of(t, struct ubus_lua_async_call, timeout);
+
+	ubus_abort_request(call->ctx, &call->req);
+	ubus_lua_async_finish(call, UBUS_STATUS_TIMEOUT);
+}
+
+/*
+ * conn:call_async(object, method, params, callback [, timeout_seconds])
+ *
+ * Returns true when the request is on its way. The callback is invoked exactly
+ * once, from uloop, with (result_or_nil, status); status is UBUS_STATUS_OK on
+ * success and UBUS_STATUS_TIMEOUT when the deadline passed.
+ */
+static int
+ubus_lua_call_async(lua_State *L)
+{
+	struct ubus_lua_connection *c = luaL_checkudata(L, 1, METANAME);
+	const char *path = luaL_checkstring(L, 2);
+	const char *func = luaL_checkstring(L, 3);
+	struct ubus_lua_async_call *call;
+	uint32_t id;
+	int timeout;
+	int rv;
+
+	luaL_checktype(L, 4, LUA_TTABLE);
+	luaL_checktype(L, 5, LUA_TFUNCTION);
+	timeout = luaL_optint(L, 6, c->timeout);
+
+	blob_buf_init(&c->buf, 0);
+	lua_pushvalue(L, 4);
+	if (!ubus_lua_format_blob_array(L, &c->buf, true)) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		lua_pushinteger(L, UBUS_STATUS_INVALID_ARGUMENT);
+		return 2;
+	}
+	lua_pop(L, 1);
+
+	rv = ubus_lookup_id(c->ctx, path, &id);
+	if (rv) {
+		lua_pushnil(L);
+		lua_pushinteger(L, rv);
+		return 2;
+	}
+
+	call = calloc(1, sizeof(*call));
+	if (!call) {
+		lua_pushnil(L);
+		lua_pushinteger(L, UBUS_STATUS_UNKNOWN_ERROR);
+		return 2;
+	}
+	call->ctx = c->ctx;
+	call->result_ref = LUA_NOREF;
+	call->fd = -1;
+
+	rv = ubus_invoke_async(c->ctx, id, func, c->buf.head, &call->req);
+	if (rv != UBUS_STATUS_OK) {
+		free(call);
+		lua_pushnil(L);
+		lua_pushinteger(L, rv);
+		return 2;
+	}
+
+	/* the callback is anchored only after the invoke can no longer fail */
+	lua_getglobal(L, "__ubus_cb_async");
+	lua_pushvalue(L, 5);
+	call->cb_ref = luaL_ref(L, -2);
+	lua_pop(L, 1);
+
+	call->req.data_cb = ubus_lua_async_data_cb;
+	call->req.fd_cb = ubus_lua_async_fd_cb;
+	call->req.complete_cb = ubus_lua_async_complete_cb;
+	call->timeout.cb = ubus_lua_async_timeout_cb;
+	if (timeout > 0)
+		uloop_timeout_set(&call->timeout, timeout * 1000);
+
+	ubus_complete_request_async(c->ctx, &call->req);
+
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
+
+/*
+ * ubus.blob_decode(buffer) — one blobmsg record out of a byte string.
+ *
+ * What comes down the descriptor is not text. 'log read' with stream:true
+ * writes blob attributes, each one length prefixed and already carrying its
+ * fields — measured on an access point, a record is 116 bytes holding msg, id,
+ * priority and source. That is better than the rendered syslog line, which
+ * would have to be picked apart again with a regular expression; it is only
+ * unusable from Lua, which has no idea what a blob is.
+ *
+ * Framing belongs here because the format does; buffering stays in Lua, where
+ * a growing string is the whole of it. Returns the table and how many bytes it
+ * consumed, so the caller can cut them off the front and look again — or nil
+ * and 'incomplete' when the record has not all arrived yet, which on a stream
+ * is the ordinary case and not an error.
+ */
+static int
+ubus_lua_blob_decode(lua_State *L)
+{
+	int idx = lua_isstring(L, 1) ? 1 : 2;
+	size_t len = 0;
+	const char *buf = luaL_checklstring(L, idx, &len);
+	const struct blob_attr *attr = (const struct blob_attr *)buf;
+	size_t need;
+
+	if (len < sizeof(struct blob_attr)) {
+		lua_pushnil(L);
+		lua_pushstring(L, "incomplete");
+		return 2;
+	}
+	need = blob_pad_len(attr);
+	if (need < sizeof(struct blob_attr)) {
+		lua_pushnil(L);
+		lua_pushstring(L, "invalid");
+		return 2;
+	}
+	if (len < need) {
+		lua_pushnil(L);
+		lua_pushstring(L, "incomplete");
+		return 2;
+	}
+
+	ubus_lua_parse_blob_array(L, blob_data(attr), blob_len(attr), true);
+	lua_pushinteger(L, (lua_Integer)need);
+
+	return 2;
+}
+
+/*
+ * ubus.read_fd(fd [, bytes]) — read from a descriptor a callback was handed.
+ *
+ * Lua on an OpenWrt access point has no way to do this on its own. io.* wants a
+ * FILE*, and posix, nixio and lfs are on none of the devices in this fleet —
+ * checked, not assumed; luasocket is there and cannot wrap a descriptor
+ * either. Without this the fd delivered above is a number nobody can use.
+ *
+ * Never blocks. The descriptor is put into non-blocking mode on first use and
+ * left that way, which is what any reader driven by uloop wants: uloop says
+ * readable, this returns what is there, and a spurious wakeup costs an EAGAIN
+ * rather than a stalled daemon.
+ *
+ * Returns the bytes read; nil, 'eof' when the writer has closed; nil, 'again'
+ * when there was nothing to take. Those three are different answers and a
+ * caller that treats them alike will either spin or stop early.
+ */
+static int
+ubus_lua_read_fd(lua_State *L)
+{
+	char buf[4096];
+	int idx = lua_isnumber(L, 1) ? 1 : 2;
+	int fd = luaL_checkint(L, idx);
+	int want = luaL_optint(L, idx + 1, (int)sizeof(buf));
+	int flags;
+	ssize_t n;
+
+	if (fd < 0) {
+		lua_pushnil(L);
+		lua_pushstring(L, "bad descriptor");
+		return 2;
+	}
+	if (want < 1)
+		want = 1;
+	if (want > (int)sizeof(buf))
+		want = (int)sizeof(buf);
+
+	flags = fcntl(fd, F_GETFL, 0);
+	if (flags >= 0 && !(flags & O_NONBLOCK))
+		fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+	do {
+		n = read(fd, buf, (size_t)want);
+	} while (n < 0 && errno == EINTR);
+
+	if (n > 0) {
+		lua_pushlstring(L, buf, (size_t)n);
+		return 1;
+	}
+	lua_pushnil(L);
+	if (n == 0)
+		lua_pushstring(L, "eof");
+	else if (errno == EAGAIN || errno == EWOULDBLOCK)
+		lua_pushstring(L, "again");
+	else
+		lua_pushstring(L, strerror(errno));
+
+	return 2;
+}
+
+/*
+ * ubus.close_fd(fd) — or conn:close_fd(fd), the same table is both.
+ *
+ * A descriptor handed to a callback is the callback's to close, and Lua has no
+ * way to do it: io.* wants a FILE*, and posix and nixio are not on every
+ * device. Without this the only way to release one is to end the process, which
+ * for a daemon reading the log is not a way at all.
+ */
+static int
+ubus_lua_close_fd(lua_State *L)
+{
+	int idx = lua_isnumber(L, 1) ? 1 : 2;
+	int fd = luaL_checkint(L, idx);
+
+	if (fd < 0) {
+		lua_pushboolean(L, 0);
+		return 1;
+	}
+	lua_pushboolean(L, close(fd) == 0);
+
+	return 1;
+}
+
 static void
 ubus_event_handler(struct ubus_context *ctx, struct ubus_event_handler *ev,
 			const char *type, struct blob_attr *msg)
@@ -962,6 +1329,10 @@ static const luaL_Reg ubus[] = {
 	{ "complete_deferred_request", ubus_lua_complete_deferred_request },
 	{ "signatures", ubus_lua_signatures },
 	{ "call", ubus_lua_call },
+	{ "call_async", ubus_lua_call_async },
+	{ "blob_decode", ubus_lua_blob_decode },
+	{ "read_fd", ubus_lua_read_fd },
+	{ "close_fd", ubus_lua_close_fd },
 	{ "close", ubus_lua__gc },
 	{ "listen", ubus_lua_listen },
 	{ "send", ubus_lua_send },
@@ -1028,5 +1399,9 @@ luaopen_ubus(lua_State *L)
 	/* create the publisher table - notifications of new subs */
 	lua_createtable(L, 1, 0);
 	lua_setglobal(L, "__ubus_cb_publisher");
+
+	/* create the async call table - callbacks and their pending results */
+	lua_createtable(L, 1, 0);
+	lua_setglobal(L, "__ubus_cb_async");
 	return 0;
 }
