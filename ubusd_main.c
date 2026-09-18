@@ -139,15 +139,17 @@ retry:
 		}
 
 		bytes = recvmsg(sock->fd, &msghdr, 0);
-		if (bytes < 0)
+		if (bytes <= 0)
 			goto out;
 
 		if (*pfd >= 0)
 			cl->pending_msg_fd = *pfd;
 
 		cl->pending_msg_offset += bytes;
-		if (cl->pending_msg_offset < (int) sizeof(cl->hdrbuf))
-			goto out;
+		if (cl->pending_msg_offset < (int) sizeof(cl->hdrbuf)) {
+			/* Keep draining; edge-triggered uloop may not fire again. */
+			goto retry;
+		}
 
 		if (blob_raw_len(&cl->hdrbuf.data) < sizeof(struct blob_attr))
 			goto disconnect;
@@ -179,7 +181,8 @@ retry:
 
 		if (bytes < len) {
 			cl->pending_msg_offset += bytes;
-			goto out;
+			/* Keep draining; edge-triggered uloop may not fire again. */
+			goto retry;
 		}
 
 		/* accept message */
