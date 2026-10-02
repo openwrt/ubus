@@ -30,6 +30,7 @@ extern "C" {
 
 struct ubus_context;
 struct ubus_msg_src;
+struct ubus_method;
 struct ubus_object;
 struct ubus_request;
 struct ubus_request_data;
@@ -49,6 +50,10 @@ typedef void (*ubus_lookup_handler_t)(struct ubus_context *ctx,
 typedef int (*ubus_handler_t)(struct ubus_context *ctx, struct ubus_object *obj,
 			      struct ubus_request_data *req,
 			      const char *method, struct blob_attr *msg);
+typedef int (*ubus_invoke_handler_t)(struct ubus_context *ctx, struct ubus_object *obj,
+				     const struct ubus_method *method,
+				     struct ubus_request_data *req,
+				     struct blob_attr *msg);
 typedef void (*ubus_state_handler_t)(struct ubus_context *ctx, struct ubus_object *obj);
 typedef void (*ubus_remove_handler_t)(struct ubus_context *ctx,
 				      struct ubus_subscriber *obj, uint32_t id);
@@ -186,6 +191,10 @@ struct ubus_context {
 			ubus_handler_t request_handler;
 		};
 	};
+
+	/* called with the matched method entry (name NULL for a catch-all)
+	 * before its handler; non-zero is the reply status */
+	ubus_invoke_handler_t pre_invoke;
 };
 
 struct ubus_object_data {
@@ -319,6 +328,10 @@ int ubus_lookup_id(struct ubus_context *ctx, const char *path, uint32_t *id);
 
 /* make an object visible to remote connections */
 int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj);
+
+/* the catch-all entry, whose name is NULL, matches any name */
+const struct ubus_method *
+ubus_object_find_method(const struct ubus_object *obj, const char *name);
 
 /* remove the object from the ubus connection */
 int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj);

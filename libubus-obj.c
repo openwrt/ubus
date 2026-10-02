@@ -49,6 +49,19 @@ ubus_process_notify(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	if (obj->subscribe_cb)
 		obj->subscribe_cb(ctx, obj);
 }
+
+const struct ubus_method *
+ubus_object_find_method(const struct ubus_object *obj, const char *name)
+{
+	int i;
+
+	for (i = 0; i < obj->n_methods; i++)
+		if (!obj->methods[i].name || !strcmp(obj->methods[i].name, name))
+			return &obj->methods[i];
+
+	return NULL;
+}
+
 static void
 ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 		    struct ubus_object *obj, struct blob_attr **attrbuf, int fd)
@@ -57,8 +70,7 @@ ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 		.fd = -1,
 		.req_fd = fd,
 	};
-	ubus_handler_t handler;
-	int method;
+	const struct ubus_method *method = NULL;
 	int ret;
 	bool no_reply = false;
 
@@ -79,10 +91,8 @@ ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	req.peer = hdr->peer;
 	req.seq = hdr->seq;
 
-	if (ubus_context_is_channel(ctx)) {
-		handler = ctx->request_handler;
+	if (ubus_context_is_channel(ctx))
 		goto found;
-	}
 
 	req.object = obj->id;
 	if (attrbuf[UBUS_ATTR_USER] && attrbuf[UBUS_ATTR_GROUP]) {
@@ -90,17 +100,11 @@ ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 		req.acl.group = blobmsg_get_string(attrbuf[UBUS_ATTR_GROUP]);
 		req.acl.object = obj->name;
 	}
-	for (method = 0; method < obj->n_methods; method++)
-		if (!obj->methods[method].name ||
-		    !strcmp(obj->methods[method].name,
-		            blob_data(attrbuf[UBUS_ATTR_METHOD]))) {
-			handler = obj->methods[method].handler;
-			goto found;
-		}
-
-	/* not found */
-	ret = UBUS_STATUS_METHOD_NOT_FOUND;
-	goto send;
+	method = ubus_object_find_method(obj, blob_data(attrbuf[UBUS_ATTR_METHOD]));
+	if (!method) {
+		ret = UBUS_STATUS_METHOD_NOT_FOUND;
+		goto send;
+	}
 
 found:
 	if (!attrbuf[UBUS_ATTR_DATA]) {
@@ -108,8 +112,14 @@ found:
 		goto send;
 	}
 
-	ret = handler(ctx, obj, &req, blob_data(attrbuf[UBUS_ATTR_METHOD]),
-		      attrbuf[UBUS_ATTR_DATA]);
+	ret = 0;
+	if (method && ctx->pre_invoke)
+		ret = ctx->pre_invoke(ctx, obj, method, &req,
+				      attrbuf[UBUS_ATTR_DATA]);
+	if (!ret)
+		ret = (method ? method->handler : ctx->request_handler)(ctx, obj,
+			&req, blob_data(attrbuf[UBUS_ATTR_METHOD]),
+			attrbuf[UBUS_ATTR_DATA]);
 	if (req.deferred || no_reply) {
 		if (req.req_fd >= 0)
 			close(req.req_fd);
