@@ -163,70 +163,57 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	return ret;
 }
 
-static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, int *recv_fd)
+/* Returns the number of bytes read, 0 if no data is available and -1 on EOF or
+ * error. A descriptor that arrives with the data is stored in *recv_fd. */
+static int recv_partial(struct ubus_context *ctx, void *buf, size_t len, int *recv_fd)
 {
 	uint8_t fd_buf[CMSG_SPACE(sizeof(int))] = { 0 };
+	struct iovec iov = { .iov_base = buf, .iov_len = len };
 	struct msghdr msghdr = { 0 };
 	struct cmsghdr *cmsg;
-	int total = 0;
-	int bytes;
-	int *pfd;
-	int fd;
+	int *pfd = NULL;
+	ssize_t bytes;
 
-	fd = ctx->sock.fd;
+	msghdr.msg_iov = &iov;
+	msghdr.msg_iovlen = 1;
 
-	msghdr.msg_iov = iov,
-	msghdr.msg_iovlen = 1,
-	msghdr.msg_control = fd_buf;
-	msghdr.msg_controllen = sizeof(fd_buf);
+	if (recv_fd) {
+		msghdr.msg_control = fd_buf;
+		msghdr.msg_controllen = sizeof(fd_buf);
 
-	cmsg = CMSG_FIRSTHDR(&msghdr);
-	cmsg->cmsg_type = SCM_RIGHTS;
-	cmsg->cmsg_level = SOL_SOCKET;
-	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+		cmsg = CMSG_FIRSTHDR(&msghdr);
+		cmsg->cmsg_type = SCM_RIGHTS;
+		cmsg->cmsg_level = SOL_SOCKET;
+		cmsg->cmsg_len = CMSG_LEN(sizeof(int));
 
-	pfd = (int *) CMSG_DATA(cmsg);
-
-	while (iov->iov_len > 0) {
-		if (recv_fd) {
-			msghdr.msg_control = fd_buf;
-			msghdr.msg_controllen = cmsg->cmsg_len;
-		} else {
-			msghdr.msg_control = NULL;
-			msghdr.msg_controllen = 0;
-		}
-
+		msghdr.msg_controllen = cmsg->cmsg_len;
+		pfd = (int *) CMSG_DATA(cmsg);
 		*pfd = -1;
-		bytes = recvmsg(fd, &msghdr, 0);
-		if (!bytes)
-			return -1;
-
-		if (bytes < 0) {
-			bytes = 0;
-			if (errno == EINTR)
-				continue;
-
-			if (errno != EAGAIN)
-				return -1;
-		}
-		if (!wait && !bytes)
-			return 0;
-
-		if (recv_fd)
-			*recv_fd = *pfd;
-
-		recv_fd = NULL;
-
-		wait = true;
-		iov->iov_len -= bytes;
-		iov->iov_base += bytes;
-		total += bytes;
-
-		if (iov->iov_len > 0)
-			wait_data(fd, false);
 	}
 
-	return total;
+	do {
+		bytes = recvmsg(ctx->sock.fd, &msghdr, 0);
+	} while (bytes < 0 && errno == EINTR);
+
+	if (!bytes)
+		return -1;
+
+	if (bytes < 0)
+		return errno == EAGAIN ? 0 : -1;
+
+	if (pfd && *pfd >= 0)
+		*recv_fd = *pfd;
+
+	return bytes;
+}
+
+void __hidden ubus_rx_reset(struct ubus_context *ctx)
+{
+	if (ctx->msgbuf_rx_fd >= 0)
+		close(ctx->msgbuf_rx_fd);
+
+	ctx->msgbuf_rx_fd = -1;
+	ctx->msgbuf_rx_len = 0;
 }
 
 bool ubus_validate_hdr(struct ubus_msghdr *hdr)
@@ -276,53 +263,67 @@ static bool alloc_msg_buf(struct ubus_context *ctx, int len)
 	return true;
 }
 
+/*
+ * A message can arrive in pieces. Keep what has arrived in the context and
+ * return false, so that the next read event continues the message instead of
+ * a wait here that would block the event loop.
+ */
 static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 {
-	struct {
-		struct ubus_msghdr hdr;
-		struct blob_attr data;
-	} hdrbuf;
-	struct iovec iov = STATIC_IOV(hdrbuf);
-	int len;
+	struct ubus_msghdr *hdr = &ctx->msgbuf_rx_hdr.hdr;
+	struct blob_attr *data = (struct blob_attr *) &ctx->msgbuf_rx_hdr.attr_id_len;
+	size_t hdr_len = sizeof(ctx->msgbuf_rx_hdr);
+	size_t msg_len;
 	int r;
 
 	/* receive header + start attribute */
-	r = recv_retry(ctx, &iov, false, recv_fd);
-	if (r <= 0) {
+	if (ctx->msgbuf_rx_len < hdr_len) {
+		r = recv_partial(ctx, (char *)&ctx->msgbuf_rx_hdr + ctx->msgbuf_rx_len,
+				 hdr_len - ctx->msgbuf_rx_len,
+				 ctx->msgbuf_rx_fd < 0 ? &ctx->msgbuf_rx_fd : NULL);
 		if (r < 0)
-			ctx->sock.eof = true;
+			goto error;
 
-		return false;
+		ctx->msgbuf_rx_len += r;
+		if (ctx->msgbuf_rx_len < hdr_len)
+			return false;
+
+		hdr->seq = be16_to_cpu(hdr->seq);
+		hdr->peer = be32_to_cpu(hdr->peer);
+
+		/* The header is already consumed, so the body cannot be skipped and the
+		 * stream cannot be resynchronised. */
+		if (!ubus_validate_hdr(hdr))
+			goto error;
+
+		if (!alloc_msg_buf(ctx, blob_raw_len(data)))
+			goto error;
+
+		memcpy(&ctx->msgbuf.hdr, hdr, sizeof(*hdr));
+		memcpy(ctx->msgbuf.data, data, sizeof(*data));
 	}
 
-	hdrbuf.hdr.seq = be16_to_cpu(hdrbuf.hdr.seq);
-	hdrbuf.hdr.peer = be32_to_cpu(hdrbuf.hdr.peer);
+	msg_len = sizeof(*hdr) + blob_raw_len(ctx->msgbuf.data);
+	if (ctx->msgbuf_rx_len < msg_len) {
+		r = recv_partial(ctx, (char *)ctx->msgbuf.data + ctx->msgbuf_rx_len - sizeof(*hdr),
+				 msg_len - ctx->msgbuf_rx_len, NULL);
+		if (r < 0)
+			goto error;
 
-	/* The header is already consumed, so the body cannot be skipped and the
-	 * stream cannot be resynchronised. */
-	if (!ubus_validate_hdr(&hdrbuf.hdr)) {
-		ctx->sock.eof = true;
-		return false;
+		ctx->msgbuf_rx_len += r;
+		if (ctx->msgbuf_rx_len < msg_len)
+			return false;
 	}
 
-	len = blob_raw_len(&hdrbuf.data);
-	if (!alloc_msg_buf(ctx, len)) {
-		ctx->sock.eof = true;
-		return false;
-	}
-
-	memcpy(&ctx->msgbuf.hdr, &hdrbuf.hdr, sizeof(hdrbuf.hdr));
-	memcpy(ctx->msgbuf.data, &hdrbuf.data, sizeof(hdrbuf.data));
-
-	iov.iov_base = (char *)ctx->msgbuf.data + sizeof(hdrbuf.data);
-	iov.iov_len = blob_len(ctx->msgbuf.data);
-	if (iov.iov_len > 0 &&
-	    recv_retry(ctx, &iov, true, NULL) <= 0) {
-		ctx->sock.eof = true;
-		return false;
-	}
-
+	*recv_fd = ctx->msgbuf_rx_fd;
+	ctx->msgbuf_rx_fd = -1;
+	ctx->msgbuf_rx_len = 0;
 	return true;
+
+error:
+	ctx->sock.eof = true;
+	ubus_rx_reset(ctx);
+	return false;
 }
 
 void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
@@ -341,14 +342,6 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 		if (uloop_cancelling() || ctx->cancel_poll)
 			break;
 	}
-
-	/*
-	 * If get_next_msg() captured an fd via the header recvmsg but then
-	 * failed (header validate, body recv, alloc), the fd is sitting in
-	 * recv_fd unowned by anyone — close it instead of leaking.
-	 */
-	if (recv_fd >= 0)
-		close(recv_fd);
 
 	if (!ctx->stack_depth)
 		ctx->pending_timer.cb(&ctx->pending_timer);
@@ -441,6 +434,7 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 		close(ctx->sock.fd);
 	}
 
+	ubus_rx_reset(ctx);
 	ctx->sock.eof = false;
 	ctx->sock.error = false;
 	ctx->sock.fd = usock(USOCK_UNIX, path, NULL);
