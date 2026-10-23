@@ -297,6 +297,44 @@ static void test_error_answer_keeps_object(void)
 	ubusd_kill();
 }
 
+/*
+ * On a live connection ubusd frees the type with its last object, and the
+ * type id goes with it.
+ */
+static void test_live_remove_type_id(void)
+{
+	struct ubus_object *first = object_new("test.first");
+	struct ubus_object *last = object_new("test.last");
+	struct ubus_context *ctx;
+	uint32_t type_id;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, first));
+	CHECK(!ubus_add_object(ctx, last));
+	type_id = test_type.id;
+	CHECK(type_id);
+
+	CHECK(!ubus_remove_object(ctx, first));
+	CHECK(!first->id);
+	CHECK(ctx->objects.count == 1);
+	CHECK(test_type.id == type_id);
+
+	CHECK(!ubus_remove_object(ctx, last));
+	CHECK(!last->id);
+	CHECK(!ctx->objects.count);
+	CHECK(!test_type.id);
+
+	ubus_free(ctx);
+	free(first);
+	free(last);
+	ubusd_kill();
+}
+
 int main(int argc, char **argv)
 {
 	char dir_template[] = "/tmp/ubus-test-XXXXXX";
@@ -321,6 +359,7 @@ int main(int argc, char **argv)
 
 	snprintf(sock_path, sizeof(sock_path), "%s/ubus.sock", dir);
 
+	test_live_remove_type_id();
 	test_error_answer_keeps_object();
 	test_send_failed_then_reconnect();
 	test_answer_lost_then_new_context();
