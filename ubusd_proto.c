@@ -151,10 +151,11 @@ static int ubusd_handle_remove_object(struct ubus_client *cl, struct ubus_msg_bu
 static int ubusd_handle_add_object(struct ubus_client *cl, struct ubus_msg_buf *ub, struct blob_attr **attr)
 {
 	struct ubus_object *obj;
+	int status;
 
-	obj = ubusd_create_object(cl, attr);
+	obj = ubusd_create_object(cl, attr, &status);
 	if (!obj)
-		return UBUS_STATUS_INVALID_ARGUMENT;
+		return status;
 
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id.id);

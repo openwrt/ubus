@@ -126,15 +126,23 @@ error_free:
 	return NULL;
 }
 
-struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr **attr)
+struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr **attr,
+					int *status)
 {
 	struct ubus_object *obj;
 	struct ubus_object_type *type = NULL;
 
-	if (attr[UBUS_ATTR_OBJTYPE])
+	*status = UBUS_STATUS_INVALID_ARGUMENT;
+
+	if (attr[UBUS_ATTR_OBJTYPE]) {
 		type = ubus_get_obj_type(blob_get_u32(attr[UBUS_ATTR_OBJTYPE]));
-	else if (attr[UBUS_ATTR_SIGNATURE])
+		if (!type) {
+			*status = UBUS_STATUS_NOT_FOUND;
+			return NULL;
+		}
+	} else if (attr[UBUS_ATTR_SIGNATURE]) {
 		type = ubus_create_obj_type(attr[UBUS_ATTR_SIGNATURE]);
+	}
 
 	obj = ubusd_create_object_internal(type, 0);
 	if (type)

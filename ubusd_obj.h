@@ -59,7 +59,8 @@ struct ubus_object {
 	uint16_t invoke_seq;
 };
 
-struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr **attr);
+struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr **attr,
+					int *status);
 struct ubus_object *ubusd_create_object_internal(struct ubus_object_type *type, uint32_t id);
 void ubusd_free_object(struct ubus_object *obj);
 
