@@ -335,6 +335,79 @@ static void test_live_remove_type_id(void)
 	ubusd_kill();
 }
 
+/*
+ * The context is freed while it still holds an object. ubusd drops the
+ * object and its type with the connection, so an object of the same type
+ * on a new context must be visible.
+ */
+static void test_free_with_object_then_new_context(void)
+{
+	struct ubus_object *held = object_new("test.held");
+	struct ubus_object *added = object_new("test.added");
+	struct ubus_context *ctx;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, held));
+	CHECK(test_type.id);
+
+	ubus_free(ctx);
+
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, added));
+	CHECK(test_type.id);
+	CHECK(object_visible("test.added"));
+
+	CHECK(!ubus_remove_object(ctx, added));
+	ubus_free(ctx);
+	free(added);
+	free(held);
+	ubusd_kill();
+}
+
+/*
+ * ubusd refuses a type id it does not know, and libubus registers the type
+ * again from its signature. Another refusal keeps the type id.
+ */
+static void test_unknown_type_id(void)
+{
+	struct ubus_object *obj = object_new("test.unknown_type");
+	struct ubus_object *dup = object_new("test.unknown_type");
+	struct ubus_context *ctx;
+	uint32_t type_id;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	test_type.id = 0x7ffffffe;
+	CHECK(!ubus_add_object(ctx, obj));
+	CHECK(obj->id);
+	CHECK(test_type.id && test_type.id != 0x7ffffffe);
+	CHECK(object_visible("test.unknown_type"));
+
+	type_id = test_type.id;
+	CHECK(ubus_add_object(ctx, dup) == UBUS_STATUS_INVALID_ARGUMENT);
+	CHECK(!dup->id);
+	CHECK(test_type.id == type_id);
+
+	CHECK(!ubus_remove_object(ctx, obj));
+	ubus_free(ctx);
+	free(dup);
+	free(obj);
+	ubusd_kill();
+}
+
 int main(int argc, char **argv)
 {
 	char dir_template[] = "/tmp/ubus-test-XXXXXX";
@@ -363,6 +436,8 @@ int main(int argc, char **argv)
 	test_error_answer_keeps_object();
 	test_send_failed_then_reconnect();
 	test_answer_lost_then_new_context();
+	test_free_with_object_then_new_context();
+	test_unknown_type_id();
 
 	rmdir(dir);
 

@@ -233,13 +233,10 @@ static bool ubus_push_object_type(const struct ubus_object_type *type)
 	return true;
 }
 
-int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
+static int __ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
 {
 	struct ubus_request req;
 	int ret;
-
-	if (ubus_context_is_channel(ctx))
-		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	blob_buf_init(&b, 0);
 
@@ -265,6 +262,27 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
 		return UBUS_STATUS_NO_DATA;
 
 	return 0;
+}
+
+int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
+{
+	int ret;
+
+	if (ubus_context_is_channel(ctx))
+		return UBUS_STATUS_INVALID_ARGUMENT;
+
+	ret = __ubus_add_object(ctx, obj);
+	if (ret != UBUS_STATUS_NOT_FOUND || !obj->name || !obj->type ||
+	    !obj->type->id)
+		return ret;
+
+	/*
+	 * ubusd does not know the type id: the ubusd that assigned it, or the
+	 * last object of the type, is gone. Register the type again.
+	 */
+	obj->type->id = 0;
+
+	return __ubus_add_object(ctx, obj);
 }
 
 static void ubus_object_forget(struct ubus_context *ctx, struct ubus_object *obj,
