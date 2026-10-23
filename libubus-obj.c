@@ -267,6 +267,17 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
 	return 0;
 }
 
+static void ubus_object_forget(struct ubus_context *ctx, struct ubus_object *obj,
+			       bool type_removed)
+{
+	avl_delete(&ctx->objects, &obj->avl);
+
+	obj->id = 0;
+
+	if (type_removed && obj->type)
+		obj->type->id = 0;
+}
+
 static void ubus_remove_object_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
 	struct ubus_object *obj = req->priv;
@@ -275,12 +286,20 @@ static void ubus_remove_object_cb(struct ubus_request *req, int type, struct blo
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
 
-	avl_delete(&req->ctx->objects, &obj->avl);
+	ubus_object_forget(req->ctx, obj, !!attrbuf[UBUS_ATTR_OBJTYPE]);
+}
 
-	obj->id = 0;
+/*
+ * libubus gave up the connection. ubusd drops the objects and types of this
+ * client when the socket closes, at the reconnect or at ubus_shutdown(), so a
+ * reconnect must not register the object again.
+ */
+static void ubus_remove_object_lost(struct ubus_context *ctx, struct ubus_object *obj)
+{
+	if (!ctx->sock.eof || !obj->id)
+		return;
 
-	if (attrbuf[UBUS_ATTR_OBJTYPE] && obj->type)
-		obj->type->id = 0;
+	ubus_object_forget(ctx, obj, true);
 }
 
 int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
@@ -294,14 +313,18 @@ int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id);
 
-	if (ubus_start_request(ctx, &req, b.head, UBUS_MSG_REMOVE_OBJECT, 0) < 0)
+	if (ubus_start_request(ctx, &req, b.head, UBUS_MSG_REMOVE_OBJECT, 0) < 0) {
+		ubus_remove_object_lost(ctx, obj);
 		return UBUS_STATUS_INVALID_ARGUMENT;
+	}
 
 	req.raw_data_cb = ubus_remove_object_cb;
 	req.priv = obj;
 	ret = ubus_complete_request(ctx, &req, 0);
-	if (ret)
+	if (ret) {
+		ubus_remove_object_lost(ctx, obj);
 		return ret;
+	}
 
 	if (obj->id)
 		return UBUS_STATUS_NO_DATA;
