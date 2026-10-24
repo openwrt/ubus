@@ -285,11 +285,8 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
 	return __ubus_add_object(ctx, obj);
 }
 
-static void ubus_object_forget(struct ubus_context *ctx, struct ubus_object *obj,
-			       bool type_removed)
+static void ubus_object_forget(struct ubus_object *obj, bool type_removed)
 {
-	avl_delete(&ctx->objects, &obj->avl);
-
 	obj->id = 0;
 
 	if (type_removed && obj->type)
@@ -304,7 +301,46 @@ static void ubus_remove_object_cb(struct ubus_request *req, int type, struct blo
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
 
-	ubus_object_forget(req->ctx, obj, !!attrbuf[UBUS_ATTR_OBJTYPE]);
+	ubus_object_forget(obj, !!attrbuf[UBUS_ATTR_OBJTYPE]);
+}
+
+static bool ubus_object_linked(struct ubus_context *ctx, struct ubus_object *obj)
+{
+	return avl_find(&ctx->objects, &obj->id) == &obj->avl;
+}
+
+static bool ubus_object_type_used(struct ubus_context *ctx,
+				  const struct ubus_object_type *type)
+{
+	struct ubus_object *obj;
+
+	avl_for_each_element(&ctx->objects, obj, avl)
+		if (obj->type == type)
+			return true;
+
+	return false;
+}
+
+/*
+ * The remove waits with no timeout, so UBUS_STATUS_TIMEOUT comes only from
+ * ubus_flush_requests(): the connection was lost, or the caller flushed the
+ * requests, before ubusd answered. A connection_lost callback may have
+ * reconnected already, which clears eof. A reconnect that fails clears eof
+ * too, and leaves no socket.
+ */
+static void ubus_remove_object_failed(struct ubus_context *ctx,
+				      struct ubus_object *obj, int ret,
+				      bool taken)
+{
+	if (!ctx->sock.eof && ret != UBUS_STATUS_TIMEOUT) {
+		if (taken)
+			avl_insert(&ctx->objects, &obj->avl);
+		return;
+	}
+
+	/* after a reconnect, another object of the type holds a new type id */
+	ubus_object_forget(obj, ctx->sock.eof || ctx->sock.fd < 0 ||
+			   !ubus_object_type_used(ctx, obj->type));
 }
 
 /*
@@ -317,12 +353,15 @@ static void ubus_remove_object_lost(struct ubus_context *ctx, struct ubus_object
 	if (!ctx->sock.eof || !obj->id)
 		return;
 
-	ubus_object_forget(ctx, obj, true);
+	if (ubus_object_linked(ctx, obj))
+		avl_delete(&ctx->objects, &obj->avl);
+	ubus_object_forget(obj, true);
 }
 
 int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
 {
 	struct ubus_request req;
+	bool taken;
 	int ret;
 
 	if (ubus_context_is_channel(ctx))
@@ -336,13 +375,23 @@ int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 	}
 
+	/*
+	 * A reconnect inside the wait must not register the object again. A
+	 * remove of the same object from a callback inside the wait finds it
+	 * taken out already.
+	 */
+	taken = ubus_object_linked(ctx, obj);
+	if (taken)
+		avl_delete(&ctx->objects, &obj->avl);
+
 	req.raw_data_cb = ubus_remove_object_cb;
 	req.priv = obj;
 	ret = ubus_complete_request(ctx, &req, 0);
-	if (ret) {
-		ubus_remove_object_lost(ctx, obj);
+	if (obj->id)
+		ubus_remove_object_failed(ctx, obj, ret, taken);
+
+	if (ret)
 		return ret;
-	}
 
 	if (obj->id)
 		return UBUS_STATUS_NO_DATA;
