@@ -358,10 +358,28 @@ static void ubus_remove_object_lost(struct ubus_context *ctx, struct ubus_object
 	ubus_object_forget(obj, true);
 }
 
-int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
-{
+struct ubus_remove_request {
 	struct ubus_request req;
 	bool taken;
+};
+
+/*
+ * ubus_complete_request() calls this after the wait and before it dispatches
+ * the messages queued during the wait, whose handlers may reconnect.
+ */
+static void ubus_remove_object_complete(struct ubus_request *req, int ret)
+{
+	struct ubus_remove_request *rreq;
+	struct ubus_object *obj = req->priv;
+
+	rreq = container_of(req, struct ubus_remove_request, req);
+	if (obj->id)
+		ubus_remove_object_failed(req->ctx, obj, ret, rreq->taken);
+}
+
+int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
+{
+	struct ubus_remove_request rreq;
 	int ret;
 
 	if (ubus_context_is_channel(ctx))
@@ -370,7 +388,7 @@ int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
 	blob_buf_init(&b, 0);
 	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id);
 
-	if (ubus_start_request(ctx, &req, b.head, UBUS_MSG_REMOVE_OBJECT, 0) < 0) {
+	if (ubus_start_request(ctx, &rreq.req, b.head, UBUS_MSG_REMOVE_OBJECT, 0) < 0) {
 		ubus_remove_object_lost(ctx, obj);
 		return UBUS_STATUS_INVALID_ARGUMENT;
 	}
@@ -380,15 +398,14 @@ int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
 	 * remove of the same object from a callback inside the wait finds it
 	 * taken out already.
 	 */
-	taken = ubus_object_linked(ctx, obj);
-	if (taken)
+	rreq.taken = ubus_object_linked(ctx, obj);
+	if (rreq.taken)
 		avl_delete(&ctx->objects, &obj->avl);
 
-	req.raw_data_cb = ubus_remove_object_cb;
-	req.priv = obj;
-	ret = ubus_complete_request(ctx, &req, 0);
-	if (obj->id)
-		ubus_remove_object_failed(ctx, obj, ret, taken);
+	rreq.req.raw_data_cb = ubus_remove_object_cb;
+	rreq.req.complete_cb = ubus_remove_object_complete;
+	rreq.req.priv = obj;
+	ret = ubus_complete_request(ctx, &rreq.req, 0);
 
 	if (ret)
 		return ret;

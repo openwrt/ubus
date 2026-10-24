@@ -8,10 +8,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/uio.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#include <libubox/usock.h>
 
 #include "libubus.h"
 
@@ -771,6 +775,355 @@ static void test_signature_refused(void)
 	ubusd_kill();
 }
 
+/*
+ * ubusd refuses the remove of an object that another context of the same
+ * process registered. Neither tree changes.
+ */
+static void test_remove_other_context(void)
+{
+	struct ubus_object *obj = object_new("test.other_ctx");
+	struct ubus_object *kept = object_new("test.kept");
+	struct ubus_context *ctx_a, *ctx_b;
+	uint32_t id;
+
+	ubusd_start();
+	ctx_a = ubus_connect(sock_path);
+	ctx_b = ubus_connect(sock_path);
+	CHECK(ctx_a && ctx_b);
+	if (!ctx_a || !ctx_b)
+		return;
+
+	CHECK(!ubus_add_object(ctx_a, obj));
+	CHECK(!ubus_add_object(ctx_b, kept));
+	id = obj->id;
+
+	CHECK(ubus_remove_object(ctx_b, obj) == UBUS_STATUS_PERMISSION_DENIED);
+	CHECK(obj->id == id);
+	CHECK(ctx_a->objects.count == 1);
+	CHECK(avl_find(&ctx_a->objects, &obj->id) == &obj->avl);
+	CHECK(ctx_b->objects.count == 1);
+	CHECK(avl_find(&ctx_b->objects, &kept->id) == &kept->avl);
+	CHECK(object_visible("test.other_ctx"));
+
+	CHECK(!ubus_remove_object(ctx_a, obj));
+	CHECK(!ctx_a->objects.count);
+	CHECK(!ubus_remove_object(ctx_b, kept));
+	ubus_free(ctx_a);
+	ubus_free(ctx_b);
+	free(obj);
+	free(kept);
+	ubusd_kill();
+}
+
+/*
+ * Another node in ctx->objects holds the id of the object that is removed.
+ * The remove must leave that node alone.
+ */
+static void test_remove_id_collision(void)
+{
+	struct ubus_object *kept = object_new("test.kept");
+	struct ubus_object *holder = object_new("test.holder");
+	struct ubus_object *removed = object_new("test.removed");
+	struct ubus_context *ctx;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, kept));
+
+	/* an id that ubusd does not know, so that it refuses the remove */
+	holder->id = kept->id ^ 0x40000000;
+	holder->avl.key = &holder->id;
+	CHECK(!avl_insert(&ctx->objects, &holder->avl));
+	removed->id = holder->id;
+
+	CHECK(ubus_remove_object(ctx, removed) == UBUS_STATUS_NOT_FOUND);
+	CHECK(removed->id == holder->id);
+	CHECK(ctx->objects.count == 2);
+	CHECK(avl_find(&ctx->objects, &holder->id) == &holder->avl);
+	CHECK(avl_find(&ctx->objects, &kept->id) == &kept->avl);
+
+	avl_delete(&ctx->objects, &holder->avl);
+	CHECK(!ubus_remove_object(ctx, kept));
+	CHECK(!ctx->objects.count);
+	ubus_free(ctx);
+	free(kept);
+	free(holder);
+	free(removed);
+	ubusd_kill();
+}
+
+static void refusal_then_eof_complete(struct ubus_request *req, int ret)
+{
+	usleep(200 * 1000);
+	ubusd_kill();
+	ubus_handle_event(req->ctx);
+	ubus_handle_event(req->ctx);
+}
+
+/*
+ * A callback during the wait reads ubusd's refusal of the remove, and then
+ * the connection ends. The wait ends with CONNECTION_FAILED, and libubus
+ * forgets the object as on a lost connection.
+ */
+static void test_refusal_then_eof(void)
+{
+	struct ubus_object *kept = object_new("test.kept");
+	struct ubus_object *refused = object_new("test.refused");
+	struct ubus_request req;
+	struct ubus_context *ctx;
+	static struct blob_buf b;
+	int ret;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, kept));
+
+	/* an id that ubusd does not know, so that it refuses the remove */
+	refused->id = kept->id ^ 0x40000000;
+	refused->avl.key = &refused->id;
+	CHECK(!avl_insert(&ctx->objects, &refused->avl));
+
+	blob_buf_init(&b, 0);
+	CHECK(!ubus_invoke_async(ctx, UBUS_SYSTEM_OBJECT_EVENT, "send", b.head, &req));
+	req.complete_cb = refusal_then_eof_complete;
+	ubus_complete_request_async(ctx, &req);
+	usleep(200 * 1000);
+
+	ret = ubus_remove_object(ctx, refused);
+	CHECK(ret == UBUS_STATUS_CONNECTION_FAILED);
+	CHECK(ctx->sock.eof);
+	CHECK(!refused->id);
+	CHECK(ctx->objects.count == 1);
+	CHECK(avl_find(&ctx->objects, &kept->id) == &kept->avl);
+	CHECK(!test_type.id);
+
+	ubus_free(ctx);
+	free(kept);
+	free(refused);
+}
+
+static int queued_reconnect_ret;
+
+static int queued_reconnect_handler(struct ubus_context *ctx,
+				    struct ubus_object *obj,
+				    struct ubus_request_data *req,
+				    const char *method, struct blob_attr *msg)
+{
+	ubusd_kill();
+	ubusd_start();
+	queued_reconnect_ret = ubus_reconnect(ctx, sock_path);
+	return 0;
+}
+
+static const struct ubus_method reconnect_methods[] = {
+	UBUS_METHOD_NOARG("reconnect", queued_reconnect_handler),
+};
+
+static struct ubus_object_type reconnect_type =
+	UBUS_OBJECT_TYPE("test_remove_lost_reconnect", reconnect_methods);
+
+/*
+ * ubusd refuses the remove. An INVOKE queued during the wait runs at the end
+ * of the wait and reconnects to a new ubusd, which must get the object.
+ */
+static void test_refused_remove_reconnect_in_queued_handler(void)
+{
+	struct ubus_object *trigger = object_new("test.trigger");
+	struct ubus_object *refused = object_new("test.refused");
+	struct ubus_context *ctx, *tx;
+	struct ubus_request req;
+	static struct blob_buf b;
+	uint32_t old_id;
+	int ret;
+
+	trigger->type = &reconnect_type;
+	trigger->methods = reconnect_methods;
+	trigger->n_methods = ARRAY_SIZE(reconnect_methods);
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	tx = ubus_connect(sock_path);
+	CHECK(ctx && tx);
+	if (!ctx || !tx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, trigger));
+
+	/* an id that ubusd does not know, so that it refuses the remove */
+	refused->id = trigger->id ^ 0x40000000;
+	refused->avl.key = &refused->id;
+	CHECK(!avl_insert(&ctx->objects, &refused->avl));
+	old_id = refused->id;
+
+	queued_reconnect_ret = -1;
+	blob_buf_init(&b, 0);
+	CHECK(!ubus_invoke_async(tx, trigger->id, "reconnect", b.head, &req));
+	usleep(200 * 1000);
+
+	ret = ubus_remove_object(ctx, refused);
+	CHECK(ret == UBUS_STATUS_NOT_FOUND);
+	CHECK(!queued_reconnect_ret);
+	CHECK(refused->id && refused->id != old_id);
+	CHECK(avl_find(&ctx->objects, &refused->id) == &refused->avl);
+	CHECK(ctx->objects.count == 2);
+	CHECK(object_visible("test.refused"));
+	CHECK(object_visible("test.trigger"));
+
+	ubus_free(tx);
+	CHECK(!ubus_remove_object(ctx, refused));
+	CHECK(!ubus_remove_object(ctx, trigger));
+	CHECK(!ctx->objects.count);
+	ubus_free(ctx);
+	free(trigger);
+	free(refused);
+	ubusd_kill();
+}
+
+static void fake_ubusd_send(int fd, uint8_t type, uint16_t seq, uint32_t peer,
+			    struct blob_buf *b)
+{
+	struct ubus_msghdr hdr = {
+		.type = type,
+		.seq = seq,
+		.peer = peer,
+	};
+	struct iovec iov[2] = {
+		{ .iov_base = &hdr, .iov_len = sizeof(hdr) },
+		{ .iov_base = b->head, .iov_len = blob_raw_len(b->head) },
+	};
+	ssize_t len = iov[0].iov_len + iov[1].iov_len;
+
+	/* libubus reads the header and the first attribute in one read() */
+	if (writev(fd, iov, 2) != len)
+		_exit(3);
+}
+
+static bool fake_ubusd_read_full(int fd, void *buf, size_t len)
+{
+	ssize_t ret;
+
+	while (len) {
+		ret = read(fd, buf, len);
+		if (ret <= 0)
+			return false;
+
+		buf = (char *) buf + ret;
+		len -= ret;
+	}
+
+	return true;
+}
+
+static bool fake_ubusd_read(int fd, struct ubus_msghdr *hdr)
+{
+	static char data[UBUS_MAX_MSGLEN];
+	struct blob_attr attr;
+	size_t len;
+
+	if (!fake_ubusd_read_full(fd, hdr, sizeof(*hdr)) ||
+	    !fake_ubusd_read_full(fd, &attr, sizeof(attr)))
+		return false;
+
+	len = blob_raw_len(&attr) - sizeof(attr);
+	if (len > sizeof(data))
+		return false;
+
+	return fake_ubusd_read_full(fd, data, len);
+}
+
+/*
+ * A ubusd that gives an id to every add, answers a remove with status 0 and
+ * no DATA, and every other request with status 0. The seq and peer fields go
+ * back unchanged, in network byte order.
+ */
+static void fake_ubusd_serve(int listen_fd)
+{
+	struct ubus_msghdr hdr;
+	struct blob_buf b = {};
+	uint32_t next_id = 0x1000;
+	int fd;
+
+	fd = accept(listen_fd, NULL, NULL);
+	if (fd < 0)
+		_exit(3);
+
+	blob_buf_init(&b, 0);
+	fake_ubusd_send(fd, UBUS_MSG_HELLO, 0, cpu_to_be32(0x12345678), &b);
+
+	while (fake_ubusd_read(fd, &hdr)) {
+		if (hdr.type == UBUS_MSG_ADD_OBJECT) {
+			blob_buf_init(&b, 0);
+			blob_put_int32(&b, UBUS_ATTR_OBJID, next_id++);
+			blob_put_int32(&b, UBUS_ATTR_OBJTYPE, 0x2000);
+			fake_ubusd_send(fd, UBUS_MSG_DATA, hdr.seq, hdr.peer, &b);
+		}
+
+		blob_buf_init(&b, 0);
+		blob_put_int32(&b, UBUS_ATTR_STATUS, 0);
+		fake_ubusd_send(fd, UBUS_MSG_STATUS, hdr.seq, hdr.peer, &b);
+	}
+
+	_exit(0);
+}
+
+/*
+ * ubusd answers the remove with status 0 but with no id. libubus keeps the
+ * object registered and returns NO_DATA.
+ */
+static void test_remove_answer_without_data(void)
+{
+	struct ubus_object *obj = object_new("test.no_data");
+	struct ubus_context *ctx;
+	int listen_fd;
+	pid_t pid;
+
+	unlink(sock_path);
+	listen_fd = usock(USOCK_UNIX | USOCK_SERVER, sock_path, NULL);
+	CHECK(listen_fd >= 0);
+	if (listen_fd < 0)
+		return;
+
+	pid = fork();
+	if (pid < 0)
+		exit(2);
+
+	if (!pid) {
+		prctl(PR_SET_PDEATHSIG, SIGKILL);
+		fake_ubusd_serve(listen_fd);
+	}
+
+	close(listen_fd);
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (ctx) {
+		CHECK(!ubus_add_object(ctx, obj));
+		CHECK(obj->id == 0x1000);
+
+		CHECK(ubus_remove_object(ctx, obj) == UBUS_STATUS_NO_DATA);
+		CHECK(obj->id == 0x1000);
+		CHECK(ctx->objects.count == 1);
+		CHECK(avl_find(&ctx->objects, &obj->id) == &obj->avl);
+		CHECK(test_type.id == 0x2000);
+
+		avl_delete(&ctx->objects, &obj->avl);
+		ubus_free(ctx);
+	}
+
+	kill(pid, SIGKILL);
+	waitpid(pid, NULL, 0);
+	unlink(sock_path);
+	test_type.id = 0;
+	free(obj);
+}
+
 int main(int argc, char **argv)
 {
 	char dir_template[] = "/tmp/ubus-test-XXXXXX";
@@ -808,6 +1161,11 @@ int main(int argc, char **argv)
 	test_unknown_type_id();
 	test_unknown_type_id_retry_refused();
 	test_signature_refused();
+	test_remove_other_context();
+	test_remove_id_collision();
+	test_refusal_then_eof();
+	test_refused_remove_reconnect_in_queued_handler();
+	test_remove_answer_without_data();
 
 	rmdir(dir);
 
