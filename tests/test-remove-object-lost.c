@@ -44,6 +44,9 @@ static const struct ubus_method test_methods[] = {
 static struct ubus_object_type test_type =
 	UBUS_OBJECT_TYPE("test_remove_lost", test_methods);
 
+static struct ubus_object_type other_type =
+	UBUS_OBJECT_TYPE("test_remove_lost_other", test_methods);
+
 static struct ubus_object *object_new(const char *name)
 {
 	struct ubus_object *obj = calloc(1, sizeof(*obj));
@@ -216,11 +219,13 @@ static void test_send_failed_then_reconnect(void)
 
 /*
  * ubusd goes away while the remove request waits for its answer. An object
- * of the same type on a new context and a new ubusd must be visible.
+ * of the same type on a new context and a new ubusd must be visible. The type
+ * id goes with the connection, also where another object of the type stays.
  */
 static void test_answer_lost_then_new_context(void)
 {
 	struct ubus_object *removed = object_new("test.removed");
+	struct ubus_object *kept = object_new("test.kept");
 	struct ubus_object *added = object_new("test.added");
 	struct itimerval timer = { .it_value = { .tv_usec = 200 * 1000 } };
 	struct ubus_context *ctx;
@@ -233,6 +238,7 @@ static void test_answer_lost_then_new_context(void)
 		return;
 
 	CHECK(!ubus_add_object(ctx, removed));
+	CHECK(!ubus_add_object(ctx, kept));
 	CHECK(test_type.id);
 
 	kill(ubusd_pid, SIGSTOP);
@@ -242,11 +248,12 @@ static void test_answer_lost_then_new_context(void)
 	ret = ubus_remove_object(ctx, removed);
 	CHECK(ret == UBUS_STATUS_CONNECTION_FAILED);
 	CHECK(!removed->id);
-	CHECK(!ctx->objects.count);
+	CHECK(ctx->objects.count == 1);
 	CHECK(!test_type.id);
 	ubusd_reap();
 	ubus_free(ctx);
 	free(removed);
+	free(kept);
 
 	ubusd_start();
 	ctx = ubus_connect(sock_path);
@@ -263,10 +270,291 @@ static void test_answer_lost_then_new_context(void)
 	ubusd_kill();
 }
 
+static int reconnect_ret;
+static bool reconnect_ubusd_start;
+
+static void reconnect_connection_lost(struct ubus_context *ctx)
+{
+	ubusd_reap();
+	if (reconnect_ubusd_start)
+		ubusd_start();
+
+	reconnect_ret = ubus_reconnect(ctx, sock_path);
+}
+
+static int remove_with_reconnect(struct ubus_context *ctx,
+				 struct ubus_object *obj, bool ubusd_restart)
+{
+	struct itimerval timer = { .it_value = { .tv_usec = 200 * 1000 } };
+
+	reconnect_ret = -1;
+	reconnect_ubusd_start = ubusd_restart;
+	ctx->connection_lost = reconnect_connection_lost;
+
+	kill(ubusd_pid, SIGSTOP);
+	signal(SIGALRM, ubusd_kill_alarm);
+	setitimer(ITIMER_REAL, &timer, NULL);
+
+	return ubus_remove_object(ctx, obj);
+}
+
+/*
+ * The connection_lost callback reconnects to a new ubusd while the remove
+ * waits. The new ubusd must not get the removed object, and the type keeps
+ * the id that the new ubusd gave it for the remaining object.
+ */
+static void test_answer_lost_reconnect_in_callback(void)
+{
+	struct ubus_object *removed = object_new("test.removed");
+	struct ubus_object *kept = object_new("test.kept");
+	struct ubus_context *ctx;
+	uint32_t old_type_id;
+	int ret;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, removed));
+	CHECK(!ubus_add_object(ctx, kept));
+	old_type_id = test_type.id;
+
+	ret = remove_with_reconnect(ctx, removed, true);
+	CHECK(!reconnect_ret);
+	CHECK(ret == UBUS_STATUS_TIMEOUT);
+	CHECK(!ctx->sock.eof);
+	CHECK(!removed->id);
+	CHECK(ctx->objects.count == 1);
+	CHECK(kept->id);
+	CHECK(test_type.id && test_type.id != old_type_id);
+	CHECK(object_visible("test.kept"));
+	CHECK(!object_visible("test.removed"));
+	free(removed);
+
+	ubusd_kill();
+	ubusd_start();
+	CHECK(!ubus_reconnect(ctx, sock_path));
+	CHECK(ctx->objects.count == 1);
+	CHECK(object_visible("test.kept"));
+	CHECK(!object_visible("test.removed"));
+
+	CHECK(!ubus_remove_object(ctx, kept));
+	ubus_free(ctx);
+	free(kept);
+	ubusd_kill();
+}
+
+/*
+ * The connection_lost callback fails to reconnect while the remove waits. A
+ * later reconnect must not register the removed object again. Neither an
+ * object of the same type nor one of another type keeps the type id of the
+ * removed object, as no ubusd knows that id any more.
+ */
+static void test_answer_lost_reconnect_failed_in_callback(void)
+{
+	struct ubus_object *removed = object_new("test.removed");
+	struct ubus_object *same = object_new("test.same");
+	struct ubus_object *other = object_new("test.other");
+	struct ubus_context *ctx;
+	int ret;
+
+	other->type = &other_type;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, removed));
+	CHECK(!ubus_add_object(ctx, same));
+	CHECK(!ubus_add_object(ctx, other));
+	CHECK(test_type.id);
+
+	ret = remove_with_reconnect(ctx, removed, false);
+	CHECK(reconnect_ret == UBUS_STATUS_CONNECTION_FAILED);
+	CHECK(ret == UBUS_STATUS_TIMEOUT);
+	CHECK(!ctx->sock.eof);
+	CHECK(!removed->id);
+	CHECK(ctx->objects.count == 2);
+	CHECK(!test_type.id);
+	free(removed);
+
+	ubusd_start();
+	CHECK(!ubus_reconnect(ctx, sock_path));
+	CHECK(ctx->objects.count == 2);
+	CHECK(object_visible("test.same"));
+	CHECK(object_visible("test.other"));
+	CHECK(!object_visible("test.removed"));
+
+	CHECK(!ubus_remove_object(ctx, same));
+	CHECK(!ubus_remove_object(ctx, other));
+	ubus_free(ctx);
+	free(same);
+	free(other);
+	ubusd_kill();
+}
+
+static struct ubus_object *nested_obj;
+static int nested_ret;
+
+static void nested_remove_complete(struct ubus_request *req, int ret)
+{
+	nested_ret = ubus_remove_object(req->ctx, nested_obj);
+}
+
+static void nested_remove_connection_lost(struct ubus_context *ctx)
+{
+	ubusd_reap();
+	nested_ret = ubus_remove_object(ctx, nested_obj);
+}
+
+/*
+ * The answer to an async request waits in the socket, so the next wait of
+ * the context reads it and its complete_cb removes the object again.
+ */
+static void nested_remove_arm(struct ubus_context *ctx, struct ubus_object *obj,
+			      struct ubus_request *req)
+{
+	static struct blob_buf b;
+
+	nested_obj = obj;
+	nested_ret = -1;
+
+	blob_buf_init(&b, 0);
+	CHECK(!ubus_invoke_async(ctx, UBUS_SYSTEM_OBJECT_EVENT, "send", b.head, req));
+	req->complete_cb = nested_remove_complete;
+	ubus_complete_request_async(ctx, req);
+	usleep(200 * 1000);
+}
+
+/*
+ * A handler that runs during the wait of a remove removes the same object
+ * again. ubusd handled the first remove, so the second one gets NOT_FOUND.
+ */
+static void test_nested_remove(void)
+{
+	struct ubus_object *removed = object_new("test.removed");
+	struct ubus_object *kept = object_new("test.kept");
+	struct ubus_request req;
+	struct ubus_context *ctx;
+	int ret;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, removed));
+	CHECK(!ubus_add_object(ctx, kept));
+
+	nested_remove_arm(ctx, removed, &req);
+	ret = ubus_remove_object(ctx, removed);
+	CHECK(!ret);
+	CHECK(nested_ret == UBUS_STATUS_NOT_FOUND);
+	CHECK(!removed->id);
+	CHECK(ctx->objects.count == 1);
+	CHECK(test_type.id);
+	CHECK(object_visible("test.kept"));
+	CHECK(!object_visible("test.removed"));
+	free(removed);
+
+	CHECK(!ubus_remove_object(ctx, kept));
+	CHECK(!ctx->objects.count);
+	ubus_free(ctx);
+	free(kept);
+	ubusd_kill();
+}
+
+/*
+ * ubusd refuses both removes of a nested remove. The object goes back into
+ * ctx->objects once.
+ */
+static void test_nested_remove_refused(void)
+{
+	struct ubus_object *refused = object_new("test.refused");
+	struct ubus_object *kept = object_new("test.kept");
+	struct ubus_request req;
+	struct ubus_context *ctx;
+	int ret;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, kept));
+
+	/* an id that ubusd does not know, so that it refuses the remove */
+	refused->id = kept->id ^ 0x40000000;
+	refused->avl.key = &refused->id;
+	CHECK(!avl_insert(&ctx->objects, &refused->avl));
+
+	nested_remove_arm(ctx, refused, &req);
+	ret = ubus_remove_object(ctx, refused);
+	CHECK(ret == UBUS_STATUS_NOT_FOUND);
+	CHECK(nested_ret == UBUS_STATUS_NOT_FOUND);
+	CHECK(refused->id == (kept->id ^ 0x40000000));
+	CHECK(ctx->objects.count == 2);
+	CHECK(avl_find(&ctx->objects, &refused->id) == &refused->avl);
+	CHECK(avl_find(&ctx->objects, &kept->id) == &kept->avl);
+
+	avl_delete(&ctx->objects, &refused->avl);
+	CHECK(!ubus_remove_object(ctx, kept));
+	CHECK(!ctx->objects.count);
+	ubus_free(ctx);
+	free(refused);
+	free(kept);
+	ubusd_kill();
+}
+
+/*
+ * The connection_lost callback removes the object that the remove waits for.
+ * The send fails, and libubus forgets the object.
+ */
+static void test_nested_remove_connection_lost(void)
+{
+	struct ubus_object *removed = object_new("test.removed");
+	struct itimerval timer = { .it_value = { .tv_usec = 200 * 1000 } };
+	struct ubus_context *ctx;
+	int ret;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, removed));
+
+	nested_obj = removed;
+	nested_ret = -1;
+	ctx->connection_lost = nested_remove_connection_lost;
+
+	kill(ubusd_pid, SIGSTOP);
+	signal(SIGALRM, ubusd_kill_alarm);
+	setitimer(ITIMER_REAL, &timer, NULL);
+
+	ret = ubus_remove_object(ctx, removed);
+	CHECK(ret == UBUS_STATUS_CONNECTION_FAILED);
+	CHECK(nested_ret == UBUS_STATUS_INVALID_ARGUMENT);
+	CHECK(!removed->id);
+	CHECK(!ctx->objects.count);
+	CHECK(!test_type.id);
+	free(removed);
+
+	ubus_free(ctx);
+}
+
 /* An error answer on a live connection leaves the object registered. */
 static void test_error_answer_keeps_object(void)
 {
 	struct ubus_object *obj = object_new("test.kept");
+	struct ubus_object *never_added = object_new("test.never");
 	struct ubus_context *ctx;
 	uint32_t id;
 	int ret;
@@ -289,10 +577,14 @@ static void test_error_answer_keeps_object(void)
 	CHECK(ctx->objects.count == 1);
 	CHECK(test_type.id);
 
+	CHECK(ubus_remove_object(ctx, never_added) == UBUS_STATUS_NOT_FOUND);
+	CHECK(ctx->objects.count == 1);
+
 	obj->id = id;
 	CHECK(!ubus_remove_object(ctx, obj));
 	CHECK(!ctx->objects.count);
 	ubus_free(ctx);
+	free(never_added);
 	free(obj);
 	ubusd_kill();
 }
@@ -507,6 +799,11 @@ int main(int argc, char **argv)
 	test_error_answer_keeps_object();
 	test_send_failed_then_reconnect();
 	test_answer_lost_then_new_context();
+	test_answer_lost_reconnect_in_callback();
+	test_answer_lost_reconnect_failed_in_callback();
+	test_nested_remove();
+	test_nested_remove_refused();
+	test_nested_remove_connection_lost();
 	test_free_with_object_then_new_context();
 	test_unknown_type_id();
 	test_unknown_type_id_retry_refused();
