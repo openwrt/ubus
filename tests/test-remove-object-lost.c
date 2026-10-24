@@ -408,6 +408,39 @@ static void test_unknown_type_id(void)
 	ubusd_kill();
 }
 
+/*
+ * ubusd refuses the unknown type id, and then refuses the add with the
+ * signature for a duplicate path. The add returns the second refusal.
+ */
+static void test_unknown_type_id_retry_refused(void)
+{
+	struct ubus_object *obj = object_new("test.retry_refused");
+	struct ubus_object *dup = object_new("test.retry_refused");
+	struct ubus_context *ctx;
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_add_object(ctx, obj));
+	CHECK(test_type.id);
+
+	test_type.id = 0x7ffffffe;
+	CHECK(ubus_add_object(ctx, dup) == UBUS_STATUS_INVALID_ARGUMENT);
+	CHECK(!dup->id);
+	CHECK(!test_type.id);
+	CHECK(ctx->objects.count == 1);
+	CHECK(object_visible("test.retry_refused"));
+
+	CHECK(!ubus_remove_object(ctx, obj));
+	ubus_free(ctx);
+	free(dup);
+	free(obj);
+	ubusd_kill();
+}
+
 int main(int argc, char **argv)
 {
 	char dir_template[] = "/tmp/ubus-test-XXXXXX";
@@ -438,6 +471,7 @@ int main(int argc, char **argv)
 	test_answer_lost_then_new_context();
 	test_free_with_object_then_new_context();
 	test_unknown_type_id();
+	test_unknown_type_id_retry_refused();
 
 	rmdir(dir);
 
