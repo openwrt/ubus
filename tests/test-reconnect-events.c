@@ -302,6 +302,73 @@ static void test_failed_readd_patterns_dropped(void)
 	ubusd_kill();
 }
 
+/*
+ * ubusd refuses an empty pattern. The handler object that the refused call
+ * added is removed again, on ubusd too, so that the caller can free it.
+ */
+static void test_refused_register_removes_object(void)
+{
+	struct counted_handler h;
+	struct ubus_context *ctx;
+
+	counted_init(&h);
+	h.ev.obj.name = "test.handler";
+	h.ev.obj.type = &test_type;
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(ubus_register_event_handler(ctx, &h.ev, "") ==
+	      UBUS_STATUS_PERMISSION_DENIED);
+	CHECK(!h.ev.obj.id);
+	CHECK(!ctx->objects.count);
+	CHECK(!object_visible("test.handler"));
+
+	CHECK(!ubus_register_event_handler(ctx, &h.ev, "test.new"));
+	ubusd_restart(ctx);
+	event_send(ctx, "test.new");
+	CHECK(h.count_new == 1);
+	CHECK(object_visible("test.handler"));
+
+	CHECK(!ubus_unregister_event_handler(ctx, &h.ev));
+	ubus_free(ctx);
+	ubusd_kill();
+}
+
+/* A refused second pattern leaves the handler and its first pattern. */
+static void test_refused_pattern_keeps_object(void)
+{
+	struct counted_handler h;
+	struct ubus_context *ctx;
+	uint32_t id;
+
+	counted_init(&h);
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(!ubus_register_event_handler(ctx, &h.ev, "test.old"));
+	id = h.ev.obj.id;
+	CHECK(ubus_register_event_handler(ctx, &h.ev, "") ==
+	      UBUS_STATUS_PERMISSION_DENIED);
+	CHECK(h.ev.obj.id == id);
+	CHECK(ctx->objects.count == 1);
+
+	event_send(ctx, "test.old");
+	CHECK(h.count_old == 1);
+	ubusd_restart(ctx);
+	event_send(ctx, "test.old");
+	CHECK(h.count_old == 2);
+
+	CHECK(!ubus_unregister_event_handler(ctx, &h.ev));
+	ubus_free(ctx);
+	ubusd_kill();
+}
+
 /* An auto subscriber learns of an object added after a reconnect. */
 static void test_auto_subscriber_after_reconnect(void)
 {
@@ -354,6 +421,8 @@ int main(int argc, char **argv)
 	test_lost_handler_patterns_dropped();
 	test_contexts_apart();
 	test_failed_readd_patterns_dropped();
+	test_refused_register_removes_object();
+	test_refused_pattern_keeps_object();
 	test_auto_subscriber_after_reconnect();
 
 	return test_ubusd_done();

@@ -353,6 +353,7 @@ int ubus_register_event_handler(struct ubus_context *ctx,
 				const char *pattern)
 {
 	struct ubus_object *obj = &ev->obj;
+	bool added = false;
 	int ret;
 
 	if (ubus_context_is_channel(ctx))
@@ -368,13 +369,22 @@ int ubus_register_event_handler(struct ubus_context *ctx,
 		ret = ubus_add_object(ctx, obj);
 		if (ret)
 			return ret;
+
+		added = true;
 	}
 
 	ret = ubus_event_register_send(ctx, obj, pattern);
-	if (!ret && pattern)
+	if (ret) {
+		/* the caller may free a handler whose register failed */
+		if (added)
+			ubus_remove_object(ctx, obj);
+		return ret;
+	}
+
+	if (pattern)
 		ubus_event_pattern_add(ctx, obj, pattern);
 
-	return ret;
+	return 0;
 }
 
 int ubus_send_event(struct ubus_context *ctx, const char *id,
