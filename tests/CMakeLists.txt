@@ -23,7 +23,11 @@ ENDFOREACH(test_case)
 
 ADD_TEST(NAME remove-object-lost COMMAND test-remove-object-lost $<TARGET_FILE:ubusd>)
 ADD_TEST(NAME remove-object-lost-san COMMAND test-remove-object-lost-san $<TARGET_FILE:ubusd>)
-SET_TESTS_PROPERTIES(remove-object-lost remove-object-lost-san PROPERTIES SKIP_RETURN_CODE 77)
+ADD_TEST(NAME reconnect-events COMMAND test-reconnect-events $<TARGET_FILE:ubusd>)
+ADD_TEST(NAME reconnect-events-san COMMAND test-reconnect-events-san $<TARGET_FILE:ubusd>)
+SET_TESTS_PROPERTIES(remove-object-lost remove-object-lost-san
+		     reconnect-events reconnect-events-san
+		     PROPERTIES SKIP_RETURN_CODE 77)
 
 ENABLE_LANGUAGE(CXX)
 ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-std=gnu++11>)

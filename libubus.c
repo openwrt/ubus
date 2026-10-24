@@ -244,12 +244,115 @@ static const struct ubus_method event_method = {
 	.handler = ubus_event_cb,
 };
 
+/*
+ * The patterns of each event registration, so that ubus_refresh_state() can
+ * register them again on a new connection. struct ubus_event_handler has no
+ * room for them without an ABI change.
+ */
+struct ubus_event_pattern {
+	struct list_head list;
+	struct ubus_context *ctx;
+	struct ubus_object *obj;
+	char pattern[];
+};
+
+static LIST_HEAD(event_patterns);
+
+static void ubus_event_pattern_add(struct ubus_context *ctx,
+				   struct ubus_object *obj, const char *pattern)
+{
+	struct ubus_event_pattern *ep;
+
+	list_for_each_entry(ep, &event_patterns, list)
+		if (ep->ctx == ctx && ep->obj == obj &&
+		    !strcmp(ep->pattern, pattern))
+			return;
+
+	ep = calloc(1, sizeof(*ep) + strlen(pattern) + 1);
+	if (!ep)
+		return;
+
+	ep->ctx = ctx;
+	ep->obj = obj;
+	strcpy(ep->pattern, pattern);
+	list_add_tail(&ep->list, &event_patterns);
+}
+
+void __hidden ubus_event_patterns_forget(struct ubus_context *ctx,
+					 struct ubus_object *obj)
+{
+	struct ubus_event_pattern *ep, *tmp;
+
+	list_for_each_entry_safe(ep, tmp, &event_patterns, list) {
+		if (ep->ctx != ctx || (obj && ep->obj != obj))
+			continue;
+
+		list_del(&ep->list);
+		free(ep);
+	}
+}
+
+static int ubus_event_register_send(struct ubus_context *ctx,
+				    struct ubus_object *obj,
+				    const char *pattern)
+{
+	struct blob_buf b2 = {};
+	int ret;
+
+	/* use a second buffer, ubus_invoke() overwrites the primary one */
+	blob_buf_init(&b2, 0);
+	blobmsg_add_u32(&b2, "object", obj->id);
+	if (pattern)
+		blobmsg_add_string(&b2, "pattern", pattern);
+
+	ret = ubus_invoke(ctx, UBUS_SYSTEM_OBJECT_EVENT, "register", b2.head,
+			  NULL, NULL, 0);
+	blob_buf_free(&b2);
+
+	return ret;
+}
+
+/*
+ * connection_lost can run during the wait of a register and remove the
+ * object, which frees its entries, so send from copies of the patterns.
+ */
+void __hidden ubus_event_patterns_register(struct ubus_context *ctx,
+					   struct ubus_object *obj)
+{
+	struct ubus_event_pattern *ep;
+	char **patterns;
+	int n = 0, i;
+
+	list_for_each_entry(ep, &event_patterns, list)
+		if (ep->ctx == ctx && ep->obj == obj)
+			n++;
+
+	if (!n)
+		return;
+
+	patterns = calloc(n, sizeof(*patterns));
+	if (!patterns)
+		return;
+
+	n = 0;
+	list_for_each_entry(ep, &event_patterns, list)
+		if (ep->ctx == ctx && ep->obj == obj)
+			patterns[n++] = strdup(ep->pattern);
+
+	for (i = 0; i < n; i++) {
+		if (patterns[i])
+			ubus_event_register_send(ctx, obj, patterns[i]);
+		free(patterns[i]);
+	}
+
+	free(patterns);
+}
+
 int ubus_register_event_handler(struct ubus_context *ctx,
 				struct ubus_event_handler *ev,
 				const char *pattern)
 {
 	struct ubus_object *obj = &ev->obj;
-	struct blob_buf b2 = {};
 	int ret;
 
 	if (ubus_context_is_channel(ctx))
@@ -267,15 +370,9 @@ int ubus_register_event_handler(struct ubus_context *ctx,
 			return ret;
 	}
 
-	/* use a second buffer, ubus_invoke() overwrites the primary one */
-	blob_buf_init(&b2, 0);
-	blobmsg_add_u32(&b2, "object", obj->id);
-	if (pattern)
-		blobmsg_add_string(&b2, "pattern", pattern);
-
-	ret = ubus_invoke(ctx, UBUS_SYSTEM_OBJECT_EVENT, "register", b2.head,
-			  NULL, NULL, 0);
-	blob_buf_free(&b2);
+	ret = ubus_event_register_send(ctx, obj, pattern);
+	if (!ret && pattern)
+		ubus_event_pattern_add(ctx, obj, pattern);
 
 	return ret;
 }
@@ -454,6 +551,7 @@ void ubus_shutdown(struct ubus_context *ctx)
 	blob_buf_free(&b);
 	if (!ctx)
 		return;
+	ubus_event_patterns_forget(ctx, NULL);
 	uloop_fd_delete(&ctx->sock);
 	if (ctx->sock.fd >= 0) {
 		close(ctx->sock.fd);

@@ -285,8 +285,10 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
 	return __ubus_add_object(ctx, obj);
 }
 
-static void ubus_object_forget(struct ubus_object *obj, bool type_removed)
+static void ubus_object_forget(struct ubus_context *ctx, struct ubus_object *obj,
+			       bool type_removed)
 {
+	ubus_event_patterns_forget(ctx, obj);
 	obj->id = 0;
 
 	if (type_removed && obj->type)
@@ -301,7 +303,7 @@ static void ubus_remove_object_cb(struct ubus_request *req, int type, struct blo
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
 
-	ubus_object_forget(obj, !!attrbuf[UBUS_ATTR_OBJTYPE]);
+	ubus_object_forget(req->ctx, obj, !!attrbuf[UBUS_ATTR_OBJTYPE]);
 }
 
 static bool ubus_object_linked(struct ubus_context *ctx, struct ubus_object *obj)
@@ -339,7 +341,7 @@ static void ubus_remove_object_failed(struct ubus_context *ctx,
 	}
 
 	/* after a reconnect, another object of the type holds a new type id */
-	ubus_object_forget(obj, ctx->sock.eof || ctx->sock.fd < 0 ||
+	ubus_object_forget(ctx, obj, ctx->sock.eof || ctx->sock.fd < 0 ||
 			   !ubus_object_type_used(ctx, obj->type));
 }
 
@@ -355,7 +357,7 @@ static void ubus_remove_object_lost(struct ubus_context *ctx, struct ubus_object
 
 	if (ubus_object_linked(ctx, obj))
 		avl_delete(&ctx->objects, &obj->avl);
-	ubus_object_forget(obj, true);
+	ubus_object_forget(ctx, obj, true);
 }
 
 struct ubus_remove_request {

@@ -30,6 +30,10 @@ int __hidden __ubus_start_request(struct ubus_context *ctx, struct ubus_request 
 void ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
 void ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
 void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout);
+void __hidden ubus_event_patterns_register(struct ubus_context *ctx,
+					   struct ubus_object *obj);
+void __hidden ubus_event_patterns_forget(struct ubus_context *ctx,
+					 struct ubus_object *obj);
 
 
 #endif

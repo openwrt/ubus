@@ -385,12 +385,9 @@ ubus_auto_sub_lookup(struct ubus_context *ctx, struct ubus_object_data *obj,
 static void
 ubus_refresh_auto_subscribe(struct ubus_context *ctx)
 {
-	struct ubus_event_handler *ev = &ctx->auto_subscribe_event_handler;
-
 	if (list_empty(&ctx->auto_subscribers))
 		return;
 
-	ubus_register_event_handler(ctx, ev, "ubus.object.add");
 	ubus_lookup(ctx, NULL, ubus_auto_sub_lookup, NULL);
 }
 
@@ -419,8 +416,14 @@ ubus_refresh_state(struct ubus_context *ctx)
 	 */
 	ctx->stack_depth++;
 
-	for (n = i, i = 0; i < n; i++)
-		ubus_add_object(ctx, objs[i]);
+	for (n = i, i = 0; i < n; i++) {
+		if (ubus_add_object(ctx, objs[i])) {
+			ubus_event_patterns_forget(ctx, objs[i]);
+			continue;
+		}
+
+		ubus_event_patterns_register(ctx, objs[i]);
+	}
 
 	ubus_refresh_auto_subscribe(ctx);
 
