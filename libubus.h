@@ -195,6 +195,18 @@ struct ubus_context {
 	/* called with the matched method entry (name NULL for a catch-all)
 	 * before its handler; non-zero is the reply status */
 	ubus_invoke_handler_t pre_invoke;
+
+	/*
+	 * Receive state of a message that has not fully arrived yet. The first
+	 * attribute header is a plain word, because C++ rejects a struct with a
+	 * flexible array member, such as struct blob_attr, inside another struct.
+	 */
+	struct {
+		struct ubus_msghdr hdr;
+		uint32_t attr_id_len;
+	} msgbuf_rx_hdr;
+	uint32_t msgbuf_rx_len;
+	int msgbuf_rx_fd;
 };
 
 struct ubus_object_data {

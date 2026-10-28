@@ -313,6 +313,7 @@ __ubus_ctx_init(struct ubus_context *ctx)
 	memset(ctx, 0, sizeof(*ctx));
 
 	ctx->sock.fd = -1;
+	ctx->msgbuf_rx_fd = -1;
 	ctx->sock.cb = ubus_handle_data;
 	ctx->connection_lost = ubus_default_connection_lost;
 	ctx->pending_timer.cb = ubus_process_pending_msg;
@@ -469,6 +470,7 @@ void ubus_shutdown(struct ubus_context *ctx)
 		free(pending);
 	}
 
+	ubus_rx_reset(ctx);
 	free(ctx->msgbuf.data);
 	ctx->msgbuf.data = NULL;
 }
