@@ -165,14 +165,14 @@ static int ubusd_handle_add_object(struct ubus_client *cl, struct ubus_msg_buf *
 	return 0;
 }
 
-static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, struct ubus_object *obj)
+static bool ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, struct ubus_object *obj)
 {
 	struct ubus_method *m;
 	int all_cnt = 0, cnt = 0;
 	void *s;
 
 	if (!obj->type)
-		return;
+		return false;
 
 	blob_buf_init(&b, 0);
 
@@ -190,8 +190,12 @@ static void ubusd_send_obj(struct ubus_client *cl, struct ubus_msg_buf *ub, stru
 	}
 	blob_nest_end(&b, s);
 
-	if (cnt || !all_cnt)
-		ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
+	if (!cnt && all_cnt)
+		return false;
+
+	ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
+
+	return true;
 }
 
 static int ubus_client_cmd_queue_add(struct ubus_client *cl,
@@ -272,10 +276,9 @@ static int __ubusd_handle_lookup(struct ubus_client *cl,
 
 	if (objpath[len - 1] != '*') {
 		obj = avl_find_element(&path, objpath, obj, path);
-		if (!obj)
+		if (!obj || !ubusd_send_obj(cl, ub, obj))
 			return UBUS_STATUS_NOT_FOUND;
 
-		ubusd_send_obj(cl, ub, obj);
 		return 0;
 	}
 
@@ -286,8 +289,8 @@ static int __ubusd_handle_lookup(struct ubus_client *cl,
 		return UBUS_STATUS_NOT_FOUND;
 
 	while (!strncmp(objpath, obj->path.key, len)) {
-		found = true;
-		ubusd_send_obj(cl, ub, obj);
+		if (ubusd_send_obj(cl, ub, obj))
+			found = true;
 		if (obj == avl_last_element(&path, obj, path))
 			break;
 		obj = avl_next_element(obj, path);
