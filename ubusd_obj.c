@@ -142,6 +142,8 @@ struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr
 		}
 	} else if (attr[UBUS_ATTR_SIGNATURE]) {
 		type = ubus_create_obj_type(attr[UBUS_ATTR_SIGNATURE]);
+		if (!type)
+			return NULL;
 	}
 
 	obj = ubusd_create_object_internal(type, 0);

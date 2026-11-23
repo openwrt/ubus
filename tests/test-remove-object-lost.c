@@ -441,6 +441,44 @@ static void test_unknown_type_id_retry_refused(void)
 	ubusd_kill();
 }
 
+static const struct ubus_method unnamed_methods[] = {
+	UBUS_METHOD_NOARG("", dummy_handler),
+};
+
+static struct ubus_object_type unnamed_type =
+	UBUS_OBJECT_TYPE("test_remove_lost_unnamed", unnamed_methods);
+
+/*
+ * ubusd cannot register a type whose signature holds a method without a
+ * name. The add fails, and no object is left that a lookup cannot find.
+ */
+static void test_signature_refused(void)
+{
+	struct ubus_object *obj = object_new("test.unnamed");
+	struct ubus_context *ctx;
+	uint32_t id;
+
+	obj->type = &unnamed_type;
+	obj->methods = unnamed_methods;
+	obj->n_methods = ARRAY_SIZE(unnamed_methods);
+
+	ubusd_start();
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (!ctx)
+		return;
+
+	CHECK(ubus_add_object(ctx, obj) == UBUS_STATUS_INVALID_ARGUMENT);
+	CHECK(!obj->id);
+	CHECK(!unnamed_type.id);
+	CHECK(!ctx->objects.count);
+	CHECK(ubus_lookup_id(ctx, "test.unnamed", &id) == UBUS_STATUS_NOT_FOUND);
+
+	ubus_free(ctx);
+	free(obj);
+	ubusd_kill();
+}
+
 int main(int argc, char **argv)
 {
 	char dir_template[] = "/tmp/ubus-test-XXXXXX";
@@ -472,6 +510,7 @@ int main(int argc, char **argv)
 	test_free_with_object_then_new_context();
 	test_unknown_type_id();
 	test_unknown_type_id_retry_refused();
+	test_signature_refused();
 
 	rmdir(dir);
 
