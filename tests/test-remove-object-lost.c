@@ -988,7 +988,7 @@ static void test_refused_remove_reconnect_in_queued_handler(void)
 }
 
 static void fake_ubusd_send(int fd, uint8_t type, uint16_t seq, uint32_t peer,
-			    struct blob_buf *b)
+			    struct blob_attr *msg)
 {
 	struct ubus_msghdr hdr = {
 		.type = type,
@@ -997,7 +997,7 @@ static void fake_ubusd_send(int fd, uint8_t type, uint16_t seq, uint32_t peer,
 	};
 	struct iovec iov[2] = {
 		{ .iov_base = &hdr, .iov_len = sizeof(hdr) },
-		{ .iov_base = b->head, .iov_len = blob_raw_len(b->head) },
+		{ .iov_base = msg, .iov_len = blob_raw_len(msg) },
 	};
 	ssize_t len = iov[0].iov_len + iov[1].iov_len;
 
@@ -1022,56 +1022,129 @@ static bool fake_ubusd_read_full(int fd, void *buf, size_t len)
 	return true;
 }
 
-static bool fake_ubusd_read(int fd, struct ubus_msghdr *hdr)
+static struct blob_attr *fake_ubusd_read(int fd, struct ubus_msghdr *hdr)
 {
-	static char data[UBUS_MAX_MSGLEN];
-	struct blob_attr attr;
+	static uint32_t data[UBUS_MAX_MSGLEN / sizeof(uint32_t)];
+	struct blob_attr *msg = (struct blob_attr *) data;
 	size_t len;
 
 	if (!fake_ubusd_read_full(fd, hdr, sizeof(*hdr)) ||
-	    !fake_ubusd_read_full(fd, &attr, sizeof(attr)))
-		return false;
+	    !fake_ubusd_read_full(fd, msg, sizeof(*msg)))
+		return NULL;
 
-	len = blob_raw_len(&attr) - sizeof(attr);
-	if (len > sizeof(data))
-		return false;
+	len = blob_raw_len(msg);
+	if (len < sizeof(*msg) || len > sizeof(data))
+		return NULL;
 
-	return fake_ubusd_read_full(fd, data, len);
+	if (!fake_ubusd_read_full(fd, msg + 1, len - sizeof(*msg)))
+		return NULL;
+
+	return msg;
 }
 
-/*
- * A ubusd that gives an id to every add, answers a remove with status 0 and
- * no DATA, and every other request with status 0. The seq and peer fields go
- * back unchanged, in network byte order.
- */
-static void fake_ubusd_serve(int listen_fd)
+static void fake_ubusd_invoke(int fd, uint32_t objid, const char *method)
 {
-	struct ubus_msghdr hdr;
 	struct blob_buf b = {};
-	uint32_t next_id = 0x1000;
-	int fd;
-
-	fd = accept(listen_fd, NULL, NULL);
-	if (fd < 0)
-		_exit(3);
 
 	blob_buf_init(&b, 0);
-	fake_ubusd_send(fd, UBUS_MSG_HELLO, 0, cpu_to_be32(0x12345678), &b);
+	blob_put_int32(&b, UBUS_ATTR_OBJID, objid);
+	blob_put_string(&b, UBUS_ATTR_METHOD, method);
+	blob_put(&b, UBUS_ATTR_DATA, NULL, 0);
+	fake_ubusd_send(fd, UBUS_MSG_INVOKE, 0, 0, b.head);
+	blob_buf_free(&b);
+}
 
-	while (fake_ubusd_read(fd, &hdr)) {
+static void fake_ubusd_conn(int fd, uint32_t *next_id, bool invoke,
+			    bool remove_data)
+{
+	struct blob_buf b = {};
+	struct ubus_msghdr hdr;
+	struct blob_attr *msg;
+	uint32_t id;
+
+	blob_buf_init(&b, 0);
+	fake_ubusd_send(fd, UBUS_MSG_HELLO, 0, cpu_to_be32(0x12345678), b.head);
+
+	while ((msg = fake_ubusd_read(fd, &hdr))) {
+		if (hdr.type == UBUS_MSG_STATUS)
+			continue;
+
 		if (hdr.type == UBUS_MSG_ADD_OBJECT) {
+			id = (*next_id)++;
 			blob_buf_init(&b, 0);
-			blob_put_int32(&b, UBUS_ATTR_OBJID, next_id++);
+			blob_put_int32(&b, UBUS_ATTR_OBJID, id);
 			blob_put_int32(&b, UBUS_ATTR_OBJTYPE, 0x2000);
-			fake_ubusd_send(fd, UBUS_MSG_DATA, hdr.seq, hdr.peer, &b);
+			fake_ubusd_send(fd, UBUS_MSG_DATA, hdr.seq, hdr.peer, b.head);
+
+			if (invoke)
+				fake_ubusd_invoke(fd, id, "remove");
+			invoke = false;
 		}
+
+		/* the request holds the id that the answer must name */
+		if (hdr.type == UBUS_MSG_REMOVE_OBJECT && remove_data)
+			fake_ubusd_send(fd, UBUS_MSG_DATA, hdr.seq, hdr.peer, msg);
 
 		blob_buf_init(&b, 0);
 		blob_put_int32(&b, UBUS_ATTR_STATUS, 0);
-		fake_ubusd_send(fd, UBUS_MSG_STATUS, hdr.seq, hdr.peer, &b);
+		fake_ubusd_send(fd, UBUS_MSG_STATUS, hdr.seq, hdr.peer, b.head);
 	}
 
-	_exit(0);
+	blob_buf_free(&b);
+}
+
+/*
+ * A ubusd that gives an id to every add and answers every request with
+ * status 0. With remove_data, it answers a remove with the id of the object,
+ * as ubusd does; else with no DATA. On each connection after the first, it
+ * calls the "remove" method of the first object added there before that add
+ * completes. The seq and peer fields go back unchanged, in network byte
+ * order.
+ */
+static void fake_ubusd_serve(int listen_fd, bool remove_data)
+{
+	uint32_t next_id = 0x1000;
+	bool invoke = false;
+	int fd;
+
+	while ((fd = accept(listen_fd, NULL, NULL)) >= 0) {
+		fake_ubusd_conn(fd, &next_id, invoke, remove_data);
+		close(fd);
+		invoke = true;
+	}
+
+	_exit(3);
+}
+
+static pid_t fake_ubusd_start(bool remove_data)
+{
+	int listen_fd;
+	pid_t pid;
+
+	unlink(sock_path);
+	listen_fd = usock(USOCK_UNIX | USOCK_SERVER, sock_path, NULL);
+	if (listen_fd < 0)
+		return -1;
+
+	pid = fork();
+	if (pid < 0)
+		exit(2);
+
+	if (!pid) {
+		prctl(PR_SET_PDEATHSIG, SIGKILL);
+		fake_ubusd_serve(listen_fd, remove_data);
+	}
+
+	close(listen_fd);
+
+	return pid;
+}
+
+static void fake_ubusd_kill(pid_t pid)
+{
+	kill(pid, SIGKILL);
+	waitpid(pid, NULL, 0);
+	unlink(sock_path);
 }
 
 /*
@@ -1082,25 +1155,13 @@ static void test_remove_answer_without_data(void)
 {
 	struct ubus_object *obj = object_new("test.no_data");
 	struct ubus_context *ctx;
-	int listen_fd;
 	pid_t pid;
 
-	unlink(sock_path);
-	listen_fd = usock(USOCK_UNIX | USOCK_SERVER, sock_path, NULL);
-	CHECK(listen_fd >= 0);
-	if (listen_fd < 0)
+	pid = fake_ubusd_start(false);
+	CHECK(pid > 0);
+	if (pid < 0)
 		return;
 
-	pid = fork();
-	if (pid < 0)
-		exit(2);
-
-	if (!pid) {
-		prctl(PR_SET_PDEATHSIG, SIGKILL);
-		fake_ubusd_serve(listen_fd);
-	}
-
-	close(listen_fd);
 	ctx = ubus_connect(sock_path);
 	CHECK(ctx);
 	if (ctx) {
@@ -1117,11 +1178,78 @@ static void test_remove_answer_without_data(void)
 		ubus_free(ctx);
 	}
 
-	kill(pid, SIGKILL);
-	waitpid(pid, NULL, 0);
-	unlink(sock_path);
+	fake_ubusd_kill(pid);
 	test_type.id = 0;
 	free(obj);
+}
+
+static struct ubus_object *readd_victim;
+static uint32_t readd_victim_id;
+static int readd_remove_ret;
+
+static int readd_remove_handler(struct ubus_context *ctx,
+				struct ubus_object *obj,
+				struct ubus_request_data *req,
+				const char *method, struct blob_attr *msg)
+{
+	readd_victim_id = readd_victim->id;
+	readd_remove_ret = ubus_remove_object(ctx, readd_victim);
+	return 0;
+}
+
+static const struct ubus_method readd_methods[] = {
+	UBUS_METHOD_NOARG("remove", readd_remove_handler),
+};
+
+static struct ubus_object_type readd_type =
+	UBUS_OBJECT_TYPE("test_remove_lost_readd", readd_methods);
+
+/*
+ * The new ubusd calls an object while the reconnect adds the objects again,
+ * and the handler removes another object. The handler runs once every object
+ * is back, and the object it removed stays removed.
+ */
+static void test_reconnect_handler_removes_object(void)
+{
+	struct ubus_object *trigger = object_new("test.trigger");
+	struct ubus_object *victim = object_new("test.victim");
+	struct ubus_context *ctx;
+	pid_t pid;
+
+	trigger->type = &readd_type;
+	trigger->methods = readd_methods;
+	trigger->n_methods = ARRAY_SIZE(readd_methods);
+
+	pid = fake_ubusd_start(true);
+	CHECK(pid > 0);
+	if (pid < 0)
+		return;
+
+	ctx = ubus_connect(sock_path);
+	CHECK(ctx);
+	if (ctx) {
+		/* the fake gives ascending ids, so the reconnect adds trigger first */
+		CHECK(!ubus_add_object(ctx, trigger));
+		CHECK(!ubus_add_object(ctx, victim));
+
+		readd_victim = victim;
+		readd_victim_id = 0;
+		readd_remove_ret = -1;
+		CHECK(!ubus_reconnect(ctx, sock_path));
+		CHECK(readd_victim_id);
+		CHECK(!readd_remove_ret);
+		CHECK(!victim->id);
+		CHECK(ctx->objects.count == 1);
+		CHECK(avl_find(&ctx->objects, &trigger->id) == &trigger->avl);
+
+		ubus_free(ctx);
+	}
+
+	fake_ubusd_kill(pid);
+	test_type.id = 0;
+	readd_type.id = 0;
+	free(trigger);
+	free(victim);
 }
 
 int main(int argc, char **argv)
@@ -1166,6 +1294,7 @@ int main(int argc, char **argv)
 	test_refusal_then_eof();
 	test_refused_remove_reconnect_in_queued_handler();
 	test_remove_answer_without_data();
+	test_reconnect_handler_removes_object();
 
 	rmdir(dir);
 

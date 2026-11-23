@@ -413,10 +413,20 @@ ubus_refresh_state(struct ubus_context *ctx)
 		obj->id = 0;
 	}
 
+	/*
+	 * Queue object messages until every object is back: a handler could
+	 * remove an object that objs still holds.
+	 */
+	ctx->stack_depth++;
+
 	for (n = i, i = 0; i < n; i++)
 		ubus_add_object(ctx, objs[i]);
 
 	ubus_refresh_auto_subscribe(ctx);
+
+	ctx->stack_depth--;
+	if (!ctx->stack_depth && !ctx->sock.registered)
+		ctx->pending_timer.cb(&ctx->pending_timer);
 }
 
 int ubus_reconnect(struct ubus_context *ctx, const char *path)
