@@ -71,7 +71,8 @@ jobs:
       - name: Checkout libubox
         uses: actions/checkout@v5
         with:
-          repository: openwrt/libubox
+          repository: BastienSAH/libubox
+          ref: add_bool_support
           path: depends/libubox
 
       - name: Install dependencies
@@ -219,7 +220,8 @@ jobs:
       - name: Checkout libubox
         uses: actions/checkout@v5
         with:
-          repository: openwrt/libubox
+          repository: BastienSAH/libubox
+          ref: add_bool_support
           path: depends/libubox
 
       - name: Install dependencies
