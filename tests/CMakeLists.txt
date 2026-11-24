@@ -30,7 +30,7 @@ SET_TESTS_PROPERTIES(remove-object-lost remove-object-lost-san
 		     PROPERTIES SKIP_RETURN_CODE 77)
 
 ENABLE_LANGUAGE(CXX)
-ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-std=gnu++11>)
+ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-std=gnu++20>)
 ADD_UNIT_TEST_CPP(test-cplusplus)
 ADD_TEST(NAME cplusplus COMMAND test-cplusplus)
 
